@@ -1,0 +1,61 @@
+{
+  "name": "multithreading",
+  "version": "0.0.2",
+  "description": "Multithreading that feels like normal JavaScript",
+  "author": "Walter van der Giessen <waltervdgiessen@gmail.com>",
+  "homepage": "https://github.com/W4G1/multithreading/tree/main#readme",
+  "license": "MIT",
+  "keywords": [
+    "multithreading",
+    "threads",
+    "worker",
+    "webworker",
+    "parallel"
+  ],
+  "types": "./dist/index.d.ts",
+  "main": "./dist/bundle.cjs.js",
+  "module": "./dist/bundle.esm.js",
+  "exports": {
+    "require": "./dist/bundle.cjs.js",
+    "import": "./dist/bundle.esm.js"
+  },
+  "files": [
+    "./dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/W4G1/multithreading.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-replace": "^5.0.5",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^11.1.5",
+    "@types/node": "^20.10.4",
+    "rimraf": "^5.0.5",
+    "rollup": "^4.8.0",
+    "tslib": "^2.6.2",
+    "typescript": "^5.3.3"
+  },
+  "scripts": {
+    "prebuild:worker": "rimraf ./temp",
+    "build:worker": "rollup --config rollup.config.worker.js --configPlugin @rollup/plugin-typescript",
+    "prebuild": "rimraf ./dist",
+    "build": "npm run build:worker && rollup --config rollup.config.js --configPlugin @rollup/plugin-typescript",
+    "postbuild": "rimraf ./temp",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "bugs": {
+    "url": "https://github.com/W4G1/multithreading/issues"
+  },
+  "dependencies": {
+    "acorn": "^8.11.2",
+    "acorn-walk": "^8.3.1",
+    "web-worker": "^1.2.0"
+  }
+}
