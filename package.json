@@ -1,6 +1,6 @@
 {
   "name": "multithreading",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Multithreading that feels like normal JavaScript",
   "author": "Walter van der Giessen <waltervdgiessen@gmail.com>",
   "homepage": "https://github.com/W4G1/multithreading/tree/main#readme",
@@ -13,10 +13,10 @@
     "parallel"
   ],
   "types": "./dist/esm/index.d.ts",
-  "main": "./dist/cjs/index.cjs",
+  "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "exports": {
-    "require": "./dist/cjs/index.cjs",
+    "require": "./dist/cjs/index.js",
     "import": "./dist/esm/index.js"
   },
   "files": [
