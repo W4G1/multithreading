@@ -7,8 +7,9 @@ import inject from "@rollup/plugin-inject";
 import fs from "node:fs";
 import path from "node:path";
 
-export default ["esm", "cjs"].flatMap((type) =>
-  ["", ".min"].map(
+export default ["esm", "cjs"].flatMap((type) => {
+  const ext = type === "esm" ? "mjs" : "cjs";
+  return ["", ".min"].map(
     (version) =>
       /** @type {import('rollup').RollupOptions} */ ({
         input: `src/index.ts`,
@@ -24,17 +25,17 @@ export default ["esm", "cjs"].flatMap((type) =>
           typescript(),
           replace({
             __INLINE_WORKER__: fs
-            .readFileSync(`.temp/worker.${type}${version}.js`, "utf8")
-            .replaceAll("`", "\\`")
-            .replaceAll("$", "\\$"),
+              .readFileSync(`.temp/worker.${type}${version}.js`, "utf8")
+              .replaceAll("`", "\\`")
+              .replaceAll("$", "\\$"),
           }),
           inject({
-            Worker: path.resolve(`src/lib/polyfills/Worker.${type}.ts`)
+            Worker: path.resolve(`src/lib/polyfills/Worker.${type}.ts`),
           }),
         ],
         output: [
           {
-            file: `dist/${type}/index${version}.js`,
+            file: `dist/${type}/index${version}.${ext}`,
             format: type,
             sourcemap: false,
             name: "multithreading",
@@ -57,5 +58,5 @@ export default ["esm", "cjs"].flatMap((type) =>
         ],
         external: ["web-worker"],
       })
-  )
-);
+  );
+});
