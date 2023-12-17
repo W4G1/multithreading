@@ -1,3 +1,5 @@
+![Multithreading logo](https://github.com/W4G1/multithreading/assets/38042257/e57499c3-8acd-42d1-b43c-10ee477b9a76)
+
 # multithreading
 
 Multithreading is a tiny runtime that allows you to execute functions on separate threads. It is designed to be as simple and fast as possible, and to be used in a similar way to regular functions.
