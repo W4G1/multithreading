@@ -1,11 +1,11 @@
 "use strict";
 
 /** @type {import('../src/index.ts').threaded} */
-const threaded = require("../dist/cjs/index.js").threaded;
+const threaded = require("../dist/cjs/index.cjs").threaded;
 /** @type {import('../src/index.ts').$unclaim}*/
-const $unclaim = require("../dist/cjs/index.js").$unclaim;
+const $unclaim = require("../dist/cjs/index.cjs").$unclaim;
 /** @type {import('../src/index.ts').$claim}*/
-const $claim = require("../dist/cjs/index.js").$claim;
+const $claim = require("../dist/cjs/index.cjs").$claim;
 
 function add(a, b) {
   return a + b;

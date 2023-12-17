@@ -1,6 +1,6 @@
 "use strict";
 
-import { $claim, $unclaim, threaded } from "../dist/esm/index.js";
+import { $claim, $unclaim, threaded } from "../dist/esm/index.mjs";
 
 function add(a, b) {
   return a + b;
