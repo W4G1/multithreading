@@ -1,6 +1,6 @@
 {
   "name": "multithreading",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Multithreading that feels like normal JavaScript",
   "author": "Walter van der Giessen <waltervdgiessen@gmail.com>",
   "homepage": "https://github.com/W4G1/multithreading/tree/main#readme",
