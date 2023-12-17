@@ -3,7 +3,9 @@ import terser from "@rollup/plugin-terser";
 import babel from "@rollup/plugin-babel";
 import replace from "@rollup/plugin-replace";
 import typescript from "@rollup/plugin-typescript";
+import inject from "@rollup/plugin-inject";
 import fs from "node:fs";
+import path from "node:path";
 
 export default ["esm", "cjs"].flatMap((type) =>
   ["", ".min"].map(
@@ -22,9 +24,12 @@ export default ["esm", "cjs"].flatMap((type) =>
           typescript(),
           replace({
             __INLINE_WORKER__: fs
-              .readFileSync(`.temp/worker.${type}${version}.js`, "utf8")
-              .replaceAll("`", "\\`")
-              .replaceAll("$", "\\$"),
+            .readFileSync(`.temp/worker.${type}${version}.js`, "utf8")
+            .replaceAll("`", "\\`")
+            .replaceAll("$", "\\$"),
+          }),
+          inject({
+            Worker: path.resolve(`src/lib/polyfills/Worker.${type}.ts`)
           }),
         ],
         output: [
@@ -36,12 +41,18 @@ export default ["esm", "cjs"].flatMap((type) =>
             globals: {
               "web-worker": "Worker",
             },
-            plugins: [...(version === ".min" ? [terser({
-              compress: {
-                toplevel: true,
-                passes: 3,
-              }
-            })] : [])],
+            plugins: [
+              ...(version === ".min"
+                ? [
+                    terser({
+                      compress: {
+                        toplevel: true,
+                        passes: 3,
+                      },
+                    }),
+                  ]
+                : []),
+            ],
           },
         ],
         external: ["web-worker"],

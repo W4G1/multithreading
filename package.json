@@ -1,6 +1,6 @@
 {
   "name": "multithreading",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Multithreading that feels like normal JavaScript",
   "author": "Walter van der Giessen <waltervdgiessen@gmail.com>",
   "homepage": "https://github.com/W4G1/multithreading/tree/main#readme",
@@ -12,12 +12,11 @@
     "webworker",
     "parallel"
   ],
-  "type": "module",
   "types": "./dist/esm/index.d.ts",
-  "main": "./dist/cjs/index.js",
+  "main": "./dist/cjs/index.cjs",
   "module": "./dist/esm/index.js",
   "exports": {
-    "require": "./dist/cjs/index.js",
+    "require": "./dist/cjs/index.cjs",
     "import": "./dist/esm/index.js"
   },
   "files": [
@@ -35,6 +34,7 @@
     "@babel/preset-env": "^7.23.6",
     "@babel/preset-typescript": "^7.23.3",
     "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-inject": "^5.0.5",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-replace": "^5.0.5",
     "@rollup/plugin-terser": "^0.4.4",
@@ -61,7 +61,9 @@
   "dependencies": {
     "@rollup/plugin-swc": "^0.3.0",
     "acorn": "^8.11.2",
-    "acorn-walk": "^8.3.1",
+    "acorn-walk": "^8.3.1"
+  },
+  "peerDependencies": {
     "web-worker": "^1.2.0"
   }
 }

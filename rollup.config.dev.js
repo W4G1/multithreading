@@ -2,6 +2,8 @@ import terser from "@rollup/plugin-terser";
 import replace from "@rollup/plugin-replace";
 import fs from "node:fs";
 import swc from '@rollup/plugin-swc';
+import inject from "@rollup/plugin-inject";
+import path from "node:path";
 
 export default ["cjs"].flatMap((type) =>
   [""].map(
@@ -16,6 +18,9 @@ export default ["cjs"].flatMap((type) =>
               .readFileSync(`.temp/worker.${type}${version}.js`, "utf8")
               .replaceAll("`", "\\`")
               .replaceAll("$", "\\$"),
+          }),
+          inject({
+            Worker: path.resolve(`src/lib/polyfills/Worker.${type}.ts`)
           }),
         ],
         output: [

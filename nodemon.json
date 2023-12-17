@@ -2,5 +2,5 @@
   "watch": ["."],
   "ext": "js,ts,json",
   "ignore": [".temp", "dist", ".rollup.cache"],
-  "exec": "rollup -c rollup.config.worker.dev.js --configPlugin @rollup/plugin-typescript && rollup -c rollup.config.dev.js --configPlugin @rollup/plugin-typescript && node ./node_test.js"
+  "exec": "rollup -c rollup.config.worker.dev.js --configPlugin @rollup/plugin-typescript && rollup -c rollup.config.dev.js --configPlugin @rollup/plugin-typescript && node ./test/node_test.js"
 }

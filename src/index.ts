@@ -1,5 +1,4 @@
 import "./lib/polyfills/Promise.withResolvers.ts";
-import "./lib/polyfills/Worker.ts";
 import { serialize } from "./lib/serialize.ts";
 import { GLOBAL_FUNCTION_NAME } from "./constants.ts";
 import * as $ from "./lib/keys.ts";
