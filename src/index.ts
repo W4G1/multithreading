@@ -1,72 +1,114 @@
-import NodeWorkerPolyfill from "web-worker";
-import { detectUndeclaredVariables } from "./lib/detectUndeclaredVariables";
-import { modifyFunctionString } from "./lib/modifyFunctionString";
-import { VariableType, WAS_KEY, serialize } from "./lib/serialize";
-import { readFileSync } from "node:fs";
-import { ShareableValue } from "./lib/ShareableValue";
-import { GLOBAL_FUNCTION_NAME } from "./constants";
+import "./lib/polyfills/Promise.withResolvers.ts";
+import "./lib/polyfills/Worker.ts";
+import { serialize } from "./lib/serialize.ts";
+import { GLOBAL_FUNCTION_NAME } from "./constants.ts";
+import * as $ from "./lib/keys.ts";
+import { InitEvent, InvocationEvent } from "./lib/types";
+import { setupWorkerListeners } from "./lib/setupWorkerListeners.ts";
 
-let inlineWorker = `__INLINE_WORKER__`;
+const INLINE_WORKER = `__INLINE_WORKER__`;
 
-export function shared<T>(value: T) {
-  return new ShareableValue(value);
-}
+export async function $claim(value: Object) {}
+export function $unclaim(value: Object) {}
+
+const workerPools = new WeakMap<Function, Worker[]>();
+const valueOwnershipQueue = new WeakMap<Object, Worker[]>();
 
 // Either AsyncGenerator or Generator
 type CommonGenerator<T, TReturn, TNext> =
   | AsyncGenerator<T, TReturn, TNext>
   | Generator<T, TReturn, TNext>;
 
-export function thread<T extends Array<unknown>, TReturn>(
-  fn: (...args: T) => CommonGenerator<any, TReturn, unknown>
+type UserFunction<T extends Array<unknown> = [], TReturn = void> = (
+  ...args: T
+) => CommonGenerator<any, TReturn, void>;
+
+export function threaded<T extends Array<unknown>, TReturn>(
+  fn: UserFunction<T, TReturn>
 ): (...args: T) => Promise<TReturn> {
-  let fnStr = fn.toString();
+  let context: Record<string, any>;
+  const workerPool: Worker[] = [];
+  const invocationQueue = new Map<number, PromiseWithResolvers<TReturn>>();
 
-  const workerCode = [
-    `globalThis.${GLOBAL_FUNCTION_NAME} = ${fnStr}`,
-    inlineWorker,
-  ];
+  workerPools.set(fn, workerPool);
 
-  const init = async () => {
-    let gen: any;
+  const workerCount =
+    typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 4;
+  let invocationCount = 0;
+
+  const init = (async () => {
+    let fnStr = fn.toString();
 
     // @ts-ignore - Call function without arguments
-    gen = fn();
-    const { value: context } = await gen.next();
-    // @ts-ignore - Early return
-    gen.return();
+    const gen = fn();
+    const result = await gen.next();
+    context = result.value;
+
+    for (const key in context) {
+      // Initialize the ownership queue
+      valueOwnershipQueue.set(context[key], []);
+    }
+
+    const workerCode = [
+      `globalThis.${GLOBAL_FUNCTION_NAME} = ${fnStr}`,
+      INLINE_WORKER,
+    ];
 
     const serializedVariables = serialize(context);
 
     for (const [key, value] of Object.entries(serializedVariables)) {
-      if (value[WAS_KEY] !== VariableType.Function) continue;
+      if (value[$.WasType] !== $.Function) continue;
       workerCode.unshift(`globalThis.${key} = ${value.value}`);
 
       delete serializedVariables[key];
     }
 
-    const worker = new (globalThis.Worker ?? NodeWorkerPolyfill)(
-      "data:text/javascript;charset=utf-8," +
-        encodeURIComponent(workerCode.join("\n")),
-      {
-        type: "module",
-      }
-    );
+    for (let i = 0; i < workerCount; i++) {
+      const worker = new Worker(
+        "data:text/javascript;charset=utf-8," +
+          encodeURIComponent(
+            [`globalThis.pid = ${i};`, ...workerCode].join("\n")
+          ),
+        {
+          type: "module",
+        }
+      );
 
-    return { worker, serializedVariables };
+      setupWorkerListeners(
+        worker,
+        context,
+        valueOwnershipQueue,
+        invocationQueue
+      );
+
+      workerPool.push(worker);
+
+      worker.postMessage({
+        [$.EventType]: $.Init,
+        [$.EventValue]: {
+          [$.ProcessId]: i,
+          [$.Variables]: serializedVariables,
+        },
+      } satisfies InitEvent);
+    }
+  })();
+
+  return async (...args) => {
+    await init;
+
+    const worker = workerPool[invocationCount % workerCount];
+
+    const pwr = Promise.withResolvers<TReturn>();
+    invocationQueue.set(invocationCount, pwr);
+
+    worker.postMessage({
+      [$.EventType]: $.Invocation,
+      [$.EventValue]: {
+        [$.InvocationId]: invocationCount++,
+        [$.Args]: args,
+      },
+    } satisfies InvocationEvent);
+
+    return pwr.promise;
   };
-
-  const initPromise = init();
-
-  return (...args) =>
-    new Promise((resolve, reject) => {
-      initPromise.then(({ worker, serializedVariables }) => {
-        worker.onmessage = (e) => resolve(e.data);
-        worker.onerror = (err) => reject(err);
-        worker.postMessage({
-          variables: serializedVariables,
-          args: args,
-        });
-      });
-    });
 }

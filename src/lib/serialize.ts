@@ -1,26 +1,12 @@
-import { ShareableValue } from "./ShareableValue";
-import { detectUndeclaredVariables } from "./detectUndeclaredVariables";
+import * as $ from "./keys.ts";
 
-export enum VariableType {
-  SharedValue,
-  Function,
-  Other,
-}
-
-export const WAS_KEY = "__multithreading_was__";
-
-export const serialize = (variables: Record<string, unknown>) => {
-  const serializedVariables: Record<string, unknown> = {};
+export const serialize = (variables: Record<string, any>) => {
+  const serializedVariables: Record<string, any> = {};
 
   for (const [key, value] of Object.entries(variables)) {
-    if (value instanceof ShareableValue) {
+    if (typeof value === "function") {
       serializedVariables[key] = {
-        [WAS_KEY]: VariableType.SharedValue,
-        value: value.value,
-      };
-    } else if (typeof value === "function") {
-      serializedVariables[key] = {
-        [WAS_KEY]: VariableType.Function,
+        [$.WasType]: $.Function,
         value: value.toString(),
       };
     } else {
@@ -31,16 +17,12 @@ export const serialize = (variables: Record<string, unknown>) => {
   return serializedVariables;
 };
 
-export const deserialize = (variables: Record<string, unknown>) => {
-  const deserializedVariables: Record<string, unknown> = {};
+export const deserialize = (variables: Record<string, any>) => {
+  const deserializedVariables: Record<string, any> = {};
 
   for (const [key, value] of Object.entries(variables)) {
-    if (typeof value === "object" && WAS_KEY in value) {
-      switch (value[WAS_KEY]) {
-        case VariableType.SharedValue:
-          deserializedVariables[key] = new ShareableValue(value.value);
-          break;
-
+    if (typeof value === "object" && $.WasType in value) {
+      switch (value[$.WasType]) {
         default:
           deserializedVariables[key] = value;
           break;

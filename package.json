@@ -1,6 +1,6 @@
 {
   "name": "multithreading",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Multithreading that feels like normal JavaScript",
   "author": "Walter van der Giessen <waltervdgiessen@gmail.com>",
   "homepage": "https://github.com/W4G1/multithreading/tree/main#readme",
@@ -12,12 +12,12 @@
     "webworker",
     "parallel"
   ],
-  "types": "./dist/index.d.ts",
-  "main": "./dist/bundle.cjs.js",
-  "module": "./dist/bundle.esm.js",
+  "types": "./dist/esm/index.d.ts",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
   "exports": {
-    "require": "./dist/bundle.cjs.js",
-    "import": "./dist/bundle.esm.js"
+    "require": "./dist/cjs/index.js",
+    "import": "./dist/esm/index.js"
   },
   "files": [
     "./dist"
@@ -30,23 +30,27 @@
     "access": "public"
   },
   "devDependencies": {
+    "@babel/plugin-transform-runtime": "^7.23.6",
+    "@babel/preset-env": "^7.23.6",
+    "@babel/preset-typescript": "^7.23.3",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-replace": "^5.0.5",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^11.1.5",
     "@types/node": "^20.10.4",
+    "core-js": "^3.34.0",
+    "nodemon": "^3.0.2",
     "rimraf": "^5.0.5",
     "rollup": "^4.8.0",
+    "rollup-plugin-ts": "^3.4.5",
     "tslib": "^2.6.2",
     "typescript": "^5.3.3"
   },
   "scripts": {
-    "prebuild:worker": "rimraf ./temp",
-    "build:worker": "rollup --config rollup.config.worker.js --configPlugin @rollup/plugin-typescript",
-    "prebuild": "rimraf ./dist",
-    "build": "npm run build:worker && rollup --config rollup.config.js --configPlugin @rollup/plugin-typescript",
-    "postbuild": "rimraf ./temp",
+    "build:worker": "rimraf .temp && rollup -c rollup.config.worker.js --configPlugin @rollup/plugin-typescript",
+    "build": "npm run build:worker && rollup -c rollup.config.js --configPlugin @rollup/plugin-typescript && rimraf .temp",
+    "dev": "nodemon",
     "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -54,6 +58,7 @@
     "url": "https://github.com/W4G1/multithreading/issues"
   },
   "dependencies": {
+    "@rollup/plugin-swc": "^0.3.0",
     "acorn": "^8.11.2",
     "acorn-walk": "^8.3.1",
     "web-worker": "^1.2.0"
