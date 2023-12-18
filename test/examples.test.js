@@ -1,9 +1,9 @@
 /** @type {import('../src/index.ts').threaded} */
-const threaded = require("../dist/cjs/index.cjs").threaded;
+const threaded = require("../dist/index.js").threaded;
 /** @type {import('../src/index.ts').$unclaim}*/
-const $unclaim = require("../dist/cjs/index.cjs").$unclaim;
+const $unclaim = require("../dist/index.js").$unclaim;
 /** @type {import('../src/index.ts').$claim}*/
-const $claim = require("../dist/cjs/index.cjs").$claim;
+const $claim = require("../dist/index.js").$claim;
 
 describe("Example tests", () => {
   test("Minimal example", async () => {
@@ -21,21 +21,18 @@ describe("Example tests", () => {
       name: "john",
       balance: 0,
     };
-    
+
     const add = threaded(async function* (amount) {
       yield { user }; // Specify dependencies
-    
+
       await $claim(user); // Wait for write lock
-    
+
       user.balance += amount;
-    
+
       $unclaim(user); // Release write lock
     });
-    
-    await Promise.all([
-      add(5),
-      add(10),
-    ]);
+
+    await Promise.all([add(5), add(10)]);
 
     expect(user.balance).toBe(15);
 
@@ -44,7 +41,7 @@ describe("Example tests", () => {
 
   test("Example with external functions", async () => {
     // Some external function
-    function add (a, b) {
+    function add(a, b) {
       return a + b;
     }
 
@@ -63,11 +60,7 @@ describe("Example tests", () => {
       $unclaim(user);
     });
 
-
-    await Promise.all([
-      addBalance(5),
-      addBalance(10),
-    ]);
+    await Promise.all([addBalance(5), addBalance(10)]);
 
     expect(user.balance).toBe(15);
 

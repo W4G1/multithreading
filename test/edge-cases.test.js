@@ -1,9 +1,9 @@
 /** @type {import('../src/index.ts').threaded} */
-const threaded = require("../dist/cjs/index.cjs").threaded;
+const threaded = require("../dist/index.js").threaded;
 /** @type {import('../src/index.ts').$unclaim}*/
-const $unclaim = require("../dist/cjs/index.cjs").$unclaim;
+const $unclaim = require("../dist/index.js").$unclaim;
 /** @type {import('../src/index.ts').$claim}*/
-const $claim = require("../dist/cjs/index.cjs").$claim;
+const $claim = require("../dist/index.js").$claim;
 
 describe("Edge case tests", () => {
   test("No yield", async () => {

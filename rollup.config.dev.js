@@ -4,7 +4,7 @@ import fs from "node:fs";
 import swc from "@rollup/plugin-swc";
 
 export default ["cjs"].flatMap((type) => {
-  const ext = type === "esm" ? "mjs" : "cjs";
+  const ext = type === "esm" ? "mjs" : "js";
   return [""].map(
     (version) =>
       /** @type {import('rollup').RollupOptions} */ ({
@@ -21,7 +21,7 @@ export default ["cjs"].flatMap((type) => {
         ],
         output: [
           {
-            file: `dist/${type}/index${version}.${ext}`,
+            file: `dist/${type}/index.${ext}`,
             format: type,
             sourcemap: false,
             name: "multithreading",
