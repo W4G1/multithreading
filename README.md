@@ -1,11 +1,12 @@
 <div align="center">
 
-<a href="https://multithreading.io">![Multithreading Banner](https://github.com/W4G1/multithreading/assets/38042257/33d76244-5605-4f0f-8bd8-e752ce1c8175)</a>
+[![Multithreading Banner](https://github.com/W4G1/multithreading/assets/38042257/33d76244-5605-4f0f-8bd8-e752ce1c8175)](https://multithreading.io)
 
-<a href="https://github.com/W4G1/multithreading/blob/main/LICENSE.md">![License](https://img.shields.io/github/license/W4G1/multithreading)</a>
-<a href="https://www.npmjs.com/package/multithreading">![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)</a>
-<a href="https://www.npmjs.com/package/multithreading?activeTab=versions">![NPM version](https://img.shields.io/npm/v/multithreading)</a>
-<a href="https://github.com/W4G1/multithreading">![GitHub Repo stars](https://img.shields.io/github/stars/W4G1/multithreading?logo=github&label=Star&labelColor=rgb(26%2C%2030%2C%2035)&color=rgb(13%2C%2017%2C%2023))</a>
+[![License](https://img.shields.io/github/license/W4G1/multithreading)](https://github.com/W4G1/multithreading/blob/main/LICENSE.md)
+[![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)](https://www.npmjs.com/package/multithreading)
+[![NPM version](https://img.shields.io/npm/v/multithreading)](https://www.npmjs.com/package/multithreading?activeTab=versions)
+[![GitHub Repo stars](https://img.shields.io/github/stars/W4G1/multithreading?logo=github&label=Star&labelColor=rgb(26%2C%2030%2C%2035)&color=rgb(13%2C%2017%2C%2023))](https://github.com/W4G1/multithreading)
+[![Node.js CI](https://github.com/W4G1/multithreading/actions/workflows/node.js.yml/badge.svg)](https://github.com/W4G1/multithreading/actions/workflows/node.js.yml)
 
 </div>
 
