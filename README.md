@@ -1,10 +1,10 @@
-![Multithreading logo](https://github.com/W4G1/multithreading/assets/38042257/2069b810-c630-42a8-9312-d86990e8f7ad)
+<a href="https://github.com/W4G1/multithreading">![Multithreading logo](https://github.com/W4G1/multithreading/assets/38042257/2069b810-c630-42a8-9312-d86990e8f7ad)
 
-<div style="text-align:center">
+<div align="center">
 
-![License](https://img.shields.io/github/license/W4G1/multithreading)
-![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)
-![NPM version](https://img.shields.io/npm/v/multithreading)
+<a href="https://github.com/W4G1/multithreading/blob/main/LICENSE.md">![License](https://img.shields.io/github/license/W4G1/multithreading)</a>
+<a href="https://www.npmjs.com/package/multithreading">![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)</a>
+<a href="https://www.npmjs.com/package/multithreading?activeTab=versions">![NPM version](https://img.shields.io/npm/v/multithreading)</a>
 
 </div>
 
