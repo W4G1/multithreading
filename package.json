@@ -1,7 +1,7 @@
 {
   "name": "multithreading",
-  "version": "0.1.8",
-  "description": "⚡ Multithreading functions in JavaScript with a focus on performance and bundle size",
+  "version": "0.1.9",
+  "description": "⚡ Multithreading functions in JavaScript, designed to be as simple and fast as possible.",
   "author": "Walter van der Giessen <waltervdgiessen@gmail.com>",
   "homepage": "https://github.com/W4G1/multithreading/tree/main#readme",
   "license": "MIT",

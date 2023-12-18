@@ -32,7 +32,7 @@ globalThis.onmessage = async (e: MessageEvent<MainEvent>) => {
       Thread.handleInvocation(e.data[$.EventValue]);
       break;
     case $.ClaimAcceptance:
-      console.log("Claimed", e.data[$.EventValue][$.Name]);
+      // console.log("Claimed", e.data[$.EventValue][$.Name]);
       Thread.handleClaimAcceptance(e.data[$.EventValue]);
       break;
   }
@@ -65,7 +65,7 @@ globalThis.$unclaim = function $unclaim(value: Object) {
 
   if (--Thread.valueInUseCount[valueName] > 0) return;
 
-  console.log("Unclaimed", valueName);
+  // console.log("Unclaimed", valueName);
 
   Thread.valueClaimMap.delete(valueName);
   globalThis.postMessage({
@@ -120,7 +120,7 @@ namespace Thread {
     gen.next();
     const returnValue = await gen.next();
 
-    console.log("Returned", returnValue.value);
+    // console.log("Returned", returnValue.value);
 
     globalThis.postMessage({
       [$.EventType]: $.Return,
