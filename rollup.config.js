@@ -2,17 +2,27 @@ import resolve from "@rollup/plugin-node-resolve";
 import terser from "@rollup/plugin-terser";
 import babel from "@rollup/plugin-babel";
 import replace from "@rollup/plugin-replace";
-import typescript from "@rollup/plugin-typescript";
+import swc from "@rollup/plugin-swc";
 import fs from "node:fs";
+import ts from "rollup-plugin-ts";
 
 export default ["esm", "cjs"].flatMap((type) => {
-  const ext = type === "esm" ? "mjs" : "cjs";
+  const ext = type === "esm" ? "mjs" : "js";
   return ["", ".min"].map(
     (version) =>
       /** @type {import('rollup').RollupOptions} */ ({
         input: `src/index.ts`,
         treeshake: version === ".min",
         plugins: [
+          ...(type === "cjs" && version === ""
+            ? [
+                ts({
+                  browserslist: false,
+                  transpileOnly: true,
+                }),
+              ]
+            : []),
+          swc(),
           resolve(),
           babel({
             babelHelpers: "bundled",
@@ -20,7 +30,6 @@ export default ["esm", "cjs"].flatMap((type) => {
             extensions: [".js", ".ts"],
             exclude: ["./node_modules/**"],
           }),
-          typescript(),
           replace({
             __INLINE_WORKER__: fs
               .readFileSync(`.temp/worker.${type}${version}.js`, "utf8")
@@ -30,7 +39,7 @@ export default ["esm", "cjs"].flatMap((type) => {
         ],
         output: [
           {
-            file: `dist/${type}/index${version}.${ext}`,
+            file: `dist/index${version}.${ext}`,
             format: type,
             sourcemap: false,
             name: "multithreading",
