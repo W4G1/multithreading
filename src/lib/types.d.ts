@@ -12,6 +12,7 @@ interface InitEvent {
   [$.EventType]: $.Init;
   [$.EventValue]: {
     [$.ProcessId]: number;
+    [$.HasYield]: boolean;
     [$.Variables]: Record<string, any>;
   };
 }
@@ -25,7 +26,7 @@ interface UnclaimEvent {
   [$.EventType]: $.Unclaim;
   [$.EventValue]: {
     [$.Name]: string;
-    [$.NewValue]: any;
+    [$.Value]: any;
   };
 }
 
@@ -45,5 +46,17 @@ interface InvocationEvent {
   };
 }
 
-type MainEvent = InitEvent | InvocationEvent | ClaimAcceptanceEvent;
+interface SynchronizationEvent {
+  [$.EventType]: $.Synchronization;
+  [$.EventValue]: {
+    [$.Name]: string;
+    [$.Value]: any;
+  };
+}
+
+type MainEvent =
+  | InitEvent
+  | InvocationEvent
+  | ClaimAcceptanceEvent
+  | SynchronizationEvent;
 type ThreadEvent = ReturnEvent | ClaimEvent | UnclaimEvent;

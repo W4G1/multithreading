@@ -9,6 +9,8 @@ import {
   InvocationEvent,
   MainEvent,
   ReturnEvent,
+  SynchronizationEvent,
+  ThreadEvent,
   UnclaimEvent,
 } from "./types";
 import { replaceContents } from "./replaceContents.ts";
@@ -35,6 +37,7 @@ globalThis.onmessage = async (e: MessageEvent<MainEvent>) => {
       // console.log("Claimed", e.data[$.EventValue][$.Name]);
       Thread.handleClaimAcceptance(e.data[$.EventValue]);
       break;
+    case $.Synchronization:
   }
 };
 
@@ -55,7 +58,7 @@ globalThis.$claim = async function $claim(value: Object) {
   globalThis.postMessage({
     [$.EventType]: $.Claim,
     [$.EventValue]: valueName,
-  } satisfies ClaimEvent);
+  } satisfies ThreadEvent);
 
   return Thread.valueClaimMap.get(valueName)!.promise;
 };
@@ -72,14 +75,16 @@ globalThis.$unclaim = function $unclaim(value: Object) {
     [$.EventType]: $.Unclaim,
     [$.EventValue]: {
       [$.Name]: valueName,
-      [$.NewValue]: value,
+      [$.Value]: value,
     },
-  } satisfies UnclaimEvent);
+  } satisfies ThreadEvent);
 };
 
 // Separate namespace to avoid polluting the global namespace
 // and avoid name collisions with the user defined function
 namespace Thread {
+  let hasYield = false;
+
   export const shareableNameMap = new WeakMap<Object, string>();
 
   // ShareableValues that are currently (being) claimed
@@ -92,13 +97,14 @@ namespace Thread {
     data: ClaimAcceptanceEvent[$.EventValue]
   ) {
     const valueName = data[$.Name];
-
     replaceContents(globalThis[valueName], data[$.Value]);
 
     valueClaimMap.get(valueName)!.resolve();
   }
 
   export async function handleInit(data: InitEvent[$.EventValue]) {
+    hasYield = data[$.HasYield];
+    globalThis.pid = data[$.ProcessId];
     const variables = deserialize(data[$.Variables]);
 
     for (const key in variables) {
@@ -117,7 +123,7 @@ namespace Thread {
   ): Promise<void> {
     const gen = globalThis[GLOBAL_FUNCTION_NAME](...data[$.Args]);
 
-    gen.next();
+    hasYield && gen.next();
     const returnValue = await gen.next();
 
     // console.log("Returned", returnValue.value);
@@ -128,6 +134,13 @@ namespace Thread {
         [$.InvocationId]: data[$.InvocationId],
         [$.Value]: returnValue.value,
       },
-    } satisfies ReturnEvent);
+    } satisfies ThreadEvent);
+  }
+
+  export async function handleSynchronization(
+    data: SynchronizationEvent[$.EventValue]
+  ) {
+    const valueName = data[$.Name];
+    replaceContents(globalThis[valueName], data[$.Value]);
   }
 }

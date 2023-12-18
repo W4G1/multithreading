@@ -1,4 +1,9 @@
-import { ClaimAcceptanceEvent, InitEvent, ThreadEvent } from "./types";
+import {
+  ClaimAcceptanceEvent,
+  InitEvent,
+  MainEvent,
+  ThreadEvent,
+} from "./types";
 import { replaceContents } from "./replaceContents.ts";
 import * as $ from "./keys.ts";
 
@@ -19,7 +24,8 @@ export function setupWorkerListeners<TReturn>(
   worker: Worker,
   context: Record<string, any>,
   valueOwnershipQueue: WeakMap<Object, Worker[]>,
-  invocationQueue: Map<number, PromiseWithResolvers<TReturn>>
+  invocationQueue: Map<number, PromiseWithResolvers<TReturn>>,
+  workerPool: Worker[]
 ) {
   worker.onmessage = (e: MessageEvent<ThreadEvent>) => {
     switch (e.data[$.EventType]) {
@@ -46,22 +52,32 @@ export function setupWorkerListeners<TReturn>(
         const data = e.data[$.EventValue];
         const valueName = data[$.Name];
         const value = context[valueName];
-        const queue = valueOwnershipQueue.get(value)!;
+        const ownershipQueue = valueOwnershipQueue.get(value)!;
 
         // Check if worker is first in queue
-        if (queue[0] !== worker) break;
+        if (ownershipQueue[0] !== worker) break;
 
-        const newValue = data[$.NewValue];
+        const newValue = data[$.Value];
 
-        // Update local value with new value.
+        // Update local value with new value
         replaceContents(value, newValue);
 
-        queue.shift();
+        // Synchronize all other workers with new value
+        for (const otherWorker of workerPool) {
+          if (otherWorker === worker) continue;
+          worker.postMessage({
+            [$.EventType]: $.Synchronization,
+            [$.EventValue]: {
+              [$.Name]: valueName,
+              [$.Value]: newValue,
+            },
+          } satisfies MainEvent);
+        }
 
-        if (queue.length > 0) {
-          announceOwnership(queue, valueName, value);
-          // setTimeout(() => {
-          // }, 500);
+        ownershipQueue.shift();
+
+        if (ownershipQueue.length > 0) {
+          announceOwnership(ownershipQueue, valueName, value);
         }
         break;
       }

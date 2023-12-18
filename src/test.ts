@@ -1,11 +1,4 @@
-"use strict";
-
-/** @type {import('../src/index.ts').threaded} */
-const threaded = require("../dist/cjs/index.cjs").threaded;
-/** @type {import('../src/index.ts').$unclaim}*/
-const $unclaim = require("../dist/cjs/index.cjs").$unclaim;
-/** @type {import('../src/index.ts').$claim}*/
-const $claim = require("../dist/cjs/index.cjs").$claim;
+import { threaded, $claim, $unclaim } from "./index.ts";
 
 function add(a, b) {
   return a + b;
@@ -21,7 +14,7 @@ async function main() {
     yield { user, add };
 
     await $claim(user);
-    
+
     // Thread now has ownership over user and is
     // guaranteed not to change by other threads
     user.balance = add(user.balance, amount);
@@ -30,7 +23,6 @@ async function main() {
 
     return user;
   });
-
 
   await Promise.all([
     addBalance(10),
@@ -45,8 +37,10 @@ async function main() {
     addBalance(10),
   ]);
 
+  addBalance.dispose();
+
   console.assert(user.balance === 200, "Balance should be 200");
-  
+
   console.log("Result in main:", user);
 }
 

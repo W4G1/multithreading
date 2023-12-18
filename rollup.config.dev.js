@@ -1,12 +1,13 @@
 import terser from "@rollup/plugin-terser";
 import replace from "@rollup/plugin-replace";
 import fs from "node:fs";
-import swc from '@rollup/plugin-swc';
+import swc from "@rollup/plugin-swc";
 import inject from "@rollup/plugin-inject";
 import path from "node:path";
 
-export default ["cjs"].flatMap((type) =>
-  [""].map(
+export default ["cjs"].flatMap((type) => {
+  const ext = type === "esm" ? "mjs" : "cjs";
+  return [""].map(
     (version) =>
       /** @type {import('rollup').RollupOptions} */ ({
         input: `src/index.ts`,
@@ -25,7 +26,7 @@ export default ["cjs"].flatMap((type) =>
         ],
         output: [
           {
-            file: `dist/${type}/index${version}.js`,
+            file: `dist/${type}/index${version}.${ext}`,
             format: type,
             sourcemap: false,
             name: "multithreading",
@@ -38,4 +39,4 @@ export default ["cjs"].flatMap((type) =>
         external: ["web-worker"],
       })
   )
-);
+});

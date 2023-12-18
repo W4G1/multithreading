@@ -2,7 +2,7 @@ import "./lib/polyfills/Promise.withResolvers.ts";
 import { serialize } from "./lib/serialize.ts";
 import { GLOBAL_FUNCTION_NAME } from "./constants.ts";
 import * as $ from "./lib/keys.ts";
-import { InitEvent, InvocationEvent } from "./lib/types";
+import { MainEvent } from "./lib/types";
 import { setupWorkerListeners } from "./lib/setupWorkerListeners.ts";
 
 const INLINE_WORKER = `__INLINE_WORKER__`;
@@ -24,8 +24,8 @@ type UserFunction<T extends Array<unknown> = [], TReturn = void> = (
 
 export function threaded<T extends Array<unknown>, TReturn>(
   fn: UserFunction<T, TReturn>
-): (...args: T) => Promise<TReturn> {
-  let context: Record<string, any>;
+): ((...args: T) => Promise<TReturn>) & { dispose: () => void } {
+  let context: Record<string, any> = {};
   const workerPool: Worker[] = [];
   const invocationQueue = new Map<number, PromiseWithResolvers<TReturn>>();
 
@@ -37,11 +37,14 @@ export function threaded<T extends Array<unknown>, TReturn>(
 
   const init = (async () => {
     let fnStr = fn.toString();
+    const hasDependencies = fnStr.includes("yield");
 
-    // @ts-ignore - Call function without arguments
-    const gen = fn();
-    const result = await gen.next();
-    context = result.value;
+    if (hasDependencies) {
+      // @ts-ignore - Call function without arguments
+      const gen = fn();
+      const result = await gen.next();
+      context = result.value;
+    }
 
     for (const key in context) {
       // Initialize the ownership queue
@@ -65,9 +68,7 @@ export function threaded<T extends Array<unknown>, TReturn>(
     for (let i = 0; i < workerCount; i++) {
       const worker = new Worker(
         "data:text/javascript;charset=utf-8," +
-          encodeURIComponent(
-            [`globalThis.pid = ${i};`, ...workerCode].join("\n")
-          ),
+          encodeURIComponent(workerCode.join("\n")),
         {
           type: "module",
         }
@@ -77,7 +78,8 @@ export function threaded<T extends Array<unknown>, TReturn>(
         worker,
         context,
         valueOwnershipQueue,
-        invocationQueue
+        invocationQueue,
+        workerPool
       );
 
       workerPool.push(worker);
@@ -86,13 +88,14 @@ export function threaded<T extends Array<unknown>, TReturn>(
         [$.EventType]: $.Init,
         [$.EventValue]: {
           [$.ProcessId]: i,
+          [$.HasYield]: hasDependencies,
           [$.Variables]: serializedVariables,
         },
-      } satisfies InitEvent);
+      } satisfies MainEvent);
     }
   })();
 
-  return async (...args) => {
+  const wrapper = async (...args: T) => {
     await init;
 
     const worker = workerPool[invocationCount % workerCount];
@@ -106,8 +109,20 @@ export function threaded<T extends Array<unknown>, TReturn>(
         [$.InvocationId]: invocationCount++,
         [$.Args]: args,
       },
-    } satisfies InvocationEvent);
+    } satisfies MainEvent);
 
     return pwr.promise;
   };
+
+  wrapper.dispose = () => {
+    for (const worker of workerPool) {
+      worker.terminate();
+    }
+
+    workerPools.delete(fn);
+    invocationQueue.forEach((pwr) => pwr.reject("Disposed"));
+    invocationQueue.clear();
+  };
+
+  return wrapper;
 }
