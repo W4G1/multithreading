@@ -39,6 +39,7 @@
     "@rollup/plugin-replace": "^5.0.5",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^11.1.5",
+    "@rollup/plugin-swc": "^0.3.0",
     "@types/node": "^20.10.4",
     "core-js": "^3.34.0",
     "nodemon": "^3.0.2",
@@ -58,11 +59,7 @@
   "bugs": {
     "url": "https://github.com/W4G1/multithreading/issues"
   },
-  "dependencies": {
-    "@rollup/plugin-swc": "^0.3.0",
-    "acorn": "^8.11.2",
-    "acorn-walk": "^8.3.1"
-  },
+  "dependencies": {},
   "peerDependencies": {
     "web-worker": "^1.2.0"
   }
