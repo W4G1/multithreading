@@ -1,13 +1,12 @@
-![Multithreading logo](https://github.com/W4G1/multithreading/assets/38042257/e57499c3-8acd-42d1-b43c-10ee477b9a76)
+![Multithreading logo](https://github.com/W4G1/multithreading/assets/38042257/2069b810-c630-42a8-9312-d86990e8f7ad)
 
 # multithreading
 
 Multithreading is a tiny runtime that allows you to execute functions on separate threads. It is designed to be as simple and fast as possible, and to be used in a similar way to regular functions.
 
-With a minified size of only 3.8kb, it has first class support for [Node.js](https://nodejs.org/), [Deno](https://deno.land/) and the [browser](https://caniuse.com/#feat=webworkers). It can also be used with any framework or library such as [React](https://reactjs.org/), [Vue](https://vuejs.org/) or [Svelte](https://svelte.dev/).
+With a minified size of only 3.8kb, it has first class support for [Node.js](https://nodejs.org/), [Deno](https://deno.dev/) and the [browser](https://caniuse.com/#feat=webworkers). It can also be used with any framework or library such as [React](https://react.dev/), [Vue](https://vuejs.org/) or [Svelte](https://svelte.dev/).
 
 Depending on the environment, it uses [Worker Threads](https://nodejs.org/api/worker_threads.html) or [Web Workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API). In addition to [ES6 generators](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function*) to make multithreading as simple as possible.
-
 
 ## Installation
 
