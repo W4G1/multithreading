@@ -104,8 +104,8 @@ const addBalance = threaded(async function* (amount) {
 
 
 await Promise.all([
-  add(5),
-  add(10),
+  addBalance(5),
+  addBalance(10),
 ]);
 
 console.log(user.balance); // 15
