@@ -65,6 +65,9 @@ export function threaded<T extends Array<unknown>, TReturn>(
       delete serializedVariables[key];
     }
 
+    // Polyfill for Node.js
+    globalThis.Worker ??= (await import("web-worker")).default;
+
     for (let i = 0; i < workerCount; i++) {
       const worker = new Worker(
         "data:text/javascript;charset=utf-8," +

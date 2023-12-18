@@ -2,8 +2,6 @@ import terser from "@rollup/plugin-terser";
 import replace from "@rollup/plugin-replace";
 import fs from "node:fs";
 import swc from "@rollup/plugin-swc";
-import inject from "@rollup/plugin-inject";
-import path from "node:path";
 
 export default ["cjs"].flatMap((type) => {
   const ext = type === "esm" ? "mjs" : "cjs";
@@ -20,9 +18,6 @@ export default ["cjs"].flatMap((type) => {
               .replaceAll("`", "\\`")
               .replaceAll("$", "\\$"),
           }),
-          inject({
-            Worker: path.resolve(`src/lib/polyfills/Worker.${type}.ts`)
-          }),
         ],
         output: [
           {
@@ -30,6 +25,7 @@ export default ["cjs"].flatMap((type) => {
             format: type,
             sourcemap: false,
             name: "multithreading",
+            dynamicImportInCjs: false,
             globals: {
               "web-worker": "Worker",
             },
@@ -38,5 +34,5 @@ export default ["cjs"].flatMap((type) => {
         ],
         external: ["web-worker"],
       })
-  )
+  );
 });

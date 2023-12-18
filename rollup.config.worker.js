@@ -1,6 +1,6 @@
-import resolve from '@rollup/plugin-node-resolve';
+import resolve from "@rollup/plugin-node-resolve";
 import terser from "@rollup/plugin-terser";
-import babel from '@rollup/plugin-babel';
+import babel from "@rollup/plugin-babel";
 
 /** @type {import('rollup').RollupOptions[]} */
 export default [
@@ -9,11 +9,11 @@ export default [
     plugins: [
       resolve(),
       babel({
-        babelHelpers: 'bundled',
-        include: ['src/**/*.ts'],
-        extensions: ['.js', '.ts' ],
-        exclude: ['./node_modules/**'],
-        presets: ["@babel/typescript"]
+        babelHelpers: "bundled",
+        include: ["src/**/*.ts"],
+        extensions: [".js", ".ts"],
+        exclude: ["./node_modules/**"],
+        presets: ["@babel/typescript"],
       }),
     ],
     output: [
@@ -27,30 +27,36 @@ export default [
         file: ".temp/worker.esm.min.js",
         format: "esm",
         sourcemap: false,
-        plugins: [terser({
-          compress: {
-            toplevel: true,
-            passes: 3,
-          }
-        })],
+        plugins: [
+          terser({
+            compress: {
+              toplevel: true,
+              passes: 3,
+            },
+          }),
+        ],
         name: "multithreading",
       },
       {
         file: ".temp/worker.cjs.js",
         format: "cjs",
         sourcemap: false,
+        dynamicImportInCjs: false,
         name: "multithreading",
       },
       {
         file: ".temp/worker.cjs.min.js",
         format: "cjs",
         sourcemap: false,
-        plugins: [terser({
-          compress: {
-            toplevel: true,
-            passes: 3,
-          }
-        })],
+        dynamicImportInCjs: false,
+        plugins: [
+          terser({
+            compress: {
+              toplevel: true,
+              passes: 3,
+            },
+          }),
+        ],
         name: "multithreading",
       },
     ],

@@ -3,9 +3,7 @@ import terser from "@rollup/plugin-terser";
 import babel from "@rollup/plugin-babel";
 import replace from "@rollup/plugin-replace";
 import typescript from "@rollup/plugin-typescript";
-import inject from "@rollup/plugin-inject";
 import fs from "node:fs";
-import path from "node:path";
 
 export default ["esm", "cjs"].flatMap((type) => {
   const ext = type === "esm" ? "mjs" : "cjs";
@@ -29,9 +27,6 @@ export default ["esm", "cjs"].flatMap((type) => {
               .replaceAll("`", "\\`")
               .replaceAll("$", "\\$"),
           }),
-          inject({
-            Worker: path.resolve(`src/lib/polyfills/Worker.${type}.ts`),
-          }),
         ],
         output: [
           {
@@ -39,6 +34,7 @@ export default ["esm", "cjs"].flatMap((type) => {
             format: type,
             sourcemap: false,
             name: "multithreading",
+            dynamicImportInCjs: false,
             globals: {
               "web-worker": "Worker",
             },
