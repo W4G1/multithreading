@@ -47,8 +47,7 @@
     "rollup": "^4.8.0",
     "rollup-plugin-ts": "^3.4.5",
     "tslib": "^2.6.2",
-    "typescript": "^5.3.3",
-    "@rollup/rollup-linux-x64-gnu": "^4.9.1"
+    "typescript": "^5.3.3"
   },
   "scripts": {
     "build:worker": "rimraf .temp && rollup -c rollup.config.worker.js --configPlugin @rollup/plugin-typescript",
@@ -63,5 +62,8 @@
   "dependencies": {},
   "peerDependencies": {
     "web-worker": "^1.2.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.9.1"
   }
 }
