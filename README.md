@@ -1,10 +1,18 @@
 ![Multithreading logo](https://github.com/W4G1/multithreading/assets/38042257/2069b810-c630-42a8-9312-d86990e8f7ad)
 
+<div style="text-align:center">
+
+![License](https://img.shields.io/github/license/W4G1/multithreading)
+![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)
+![NPM version](https://img.shields.io/npm/v/multithreading)
+
+</div>
+
 # multithreading
 
 Multithreading is a tiny runtime that allows you to execute functions on separate threads. It is designed to be as simple and fast as possible, and to be used in a similar way to regular functions.
 
-With a minified size of only 3.8kb, it has first class support for [Node.js](https://nodejs.org/), [Deno](https://deno.dev/) and the [browser](https://caniuse.com/#feat=webworkers). It can also be used with any framework or library such as [React](https://react.dev/), [Vue](https://vuejs.org/) or [Svelte](https://svelte.dev/).
+With a minified size of only 3.8kb, it has first class support for [Node.js](https://nodejs.org/), [Deno](https://deno.com/) and the [browser](https://caniuse.com/webworkers/). It can also be used with any framework or library such as [React](https://react.dev/), [Vue](https://vuejs.org/) or [Svelte](https://svelte.dev/).
 
 Depending on the environment, it uses [Worker Threads](https://nodejs.org/api/worker_threads.html) or [Web Workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API). In addition to [ES6 generators](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function*) to make multithreading as simple as possible.
 
@@ -15,7 +23,7 @@ npm install multithreading
 ```
 
 #### Node.js
-To use the `multithreading` package with Node.js, it is necessary to install the [web-worker](https://www.npmjs.com/package/web-worker) package because Node.js does not support web workers by default.
+To use the `multithreading` package with Node.js, and to keep the bundle size as small as possible, it is necessary to install the [web-worker](https://www.npmjs.com/package/web-worker) package separately because Node.js does not support web workers by default.
 
 ```bash
 npm install web-worker
