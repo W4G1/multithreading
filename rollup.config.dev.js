@@ -21,7 +21,7 @@ export default ["cjs"].flatMap((type) => {
         ],
         output: [
           {
-            file: `dist/${type}/index.${ext}`,
+            file: `dist/index.${ext}`,
             format: type,
             sourcemap: false,
             name: "multithreading",

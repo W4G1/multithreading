@@ -14,6 +14,7 @@ interface InitEvent {
     [$.ProcessId]: number;
     [$.HasYield]: boolean;
     [$.Variables]: Record<string, any>;
+    [$.DebugEnabled]: boolean;
   };
 }
 

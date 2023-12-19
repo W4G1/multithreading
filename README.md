@@ -12,9 +12,9 @@
 
 # multithreading
 
-Multithreading is a tiny runtime that allows you to execute functions on separate threads. It is designed to be as simple and fast as possible, and to be used in a similar way to regular functions.
+Multithreading is a tiny runtime that allows you to execute JavaScript functions on separate threads. It is designed to be as simple and fast as possible, and to be used in a similar way to regular functions.
 
-With a minified size of only 3.8kb, it has first class support for [Node.js](https://nodejs.org/), [Deno](https://deno.com/) and the [browser](https://caniuse.com/?search=webworkers). It can also be used with any framework or library such as [React](https://react.dev/), [Vue](https://vuejs.org/) or [Svelte](https://svelte.dev/).
+With a minified size of only 4.5kb, it has first class support for [Node.js](https://nodejs.org/), [Deno](https://deno.com/) and the [browser](https://caniuse.com/?search=webworkers). It can also be used with any framework or library such as [React](https://react.dev/), [Vue](https://vuejs.org/) or [Svelte](https://svelte.dev/).
 
 Depending on the environment, it uses [Worker Threads](https://nodejs.org/api/worker_threads.html) or [Web Workers](https://developer.mozilla.org/en-US/docs/Web/API/Worker). In addition to [ES6 generators](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function*) to make multithreading as simple as possible.
 
@@ -110,3 +110,35 @@ In this example, the `add` function is used within the multithreaded `addBalance
 As with previous examples, the shared state is managed using `$claim` and `$unclaim` to guarantee proper synchronization and prevent data conflicts.
 
 > External functions like `add` cannot have external dependencies themselves. All variables and functions used by an external function must be declared within the function itself.
+
+### Using imports from external packages
+
+When using external modules, you can dynamically import them by using the `import()` statement. This is useful when you want to use other packages within a threaded function.
+
+```js
+import { threaded } from "multithreading";
+
+const getId = threaded(async function* () {
+  yield {};
+
+  const uuid = await import("uuid"); // Import other package
+
+  return uuid.v4();
+}
+
+console.log(await getId()); // 1a107623-3052-4f61-aca9-9d9388fb2d81
+```
+
+### Usage with Svelte
+
+Svelte disallows imports whose name start with a `$`. To use multithreading with Svelte, you can also retrieve `$claim` and `$unclaim` directly from the `yield` statement.
+
+```js
+import { threaded } from "multithreading";
+
+const fn = threaded(function* () {
+  const { $claim, $unclaim } = yield {};
+
+  // ...
+}
+```

@@ -19,6 +19,7 @@ export const HasYield = "g";
 export const InvocationId = "h";
 export const Value = "i";
 export const ProcessId = "j";
+export const DebugEnabled = "k";
 
 export declare type Function = typeof Function;
 export declare type Other = typeof Other;
@@ -41,3 +42,4 @@ export declare type HasYield = typeof HasYield;
 export declare type InvocationId = typeof InvocationId;
 export declare type Value = typeof Value;
 export declare type ProcessId = typeof ProcessId;
+export declare type DebugEnabled = typeof DebugEnabled;

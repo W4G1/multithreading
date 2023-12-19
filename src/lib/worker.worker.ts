@@ -4,26 +4,21 @@ import { deserialize } from "./serialize.ts";
 import * as $ from "./keys.ts";
 import {
   ClaimAcceptanceEvent,
-  ClaimEvent,
   InitEvent,
   InvocationEvent,
   MainEvent,
-  ReturnEvent,
   SynchronizationEvent,
   ThreadEvent,
-  UnclaimEvent,
 } from "./types";
 import { replaceContents } from "./replaceContents.ts";
 
 declare var pid: number;
 
-const cyanStart = "\x1b[36m";
-const cyanEnd = "\x1b[39m";
-
-const originalLog = console.log;
-console.log = (...args) => {
-  originalLog(`${cyanStart}[Thread_${pid}]${cyanEnd}`, ...args);
-};
+declare global {
+  var pid: number;
+  function $claim(value: Object): Promise<void>;
+  function $unclaim(value: Object): void;
+}
 
 globalThis.onmessage = async (e: MessageEvent<MainEvent>) => {
   switch (e.data[$.EventType]) {
@@ -34,19 +29,24 @@ globalThis.onmessage = async (e: MessageEvent<MainEvent>) => {
       Thread.handleInvocation(e.data[$.EventValue]);
       break;
     case $.ClaimAcceptance:
-      // console.log("Claimed", e.data[$.EventValue][$.Name]);
       Thread.handleClaimAcceptance(e.data[$.EventValue]);
       break;
     case $.Synchronization:
   }
 };
 
-globalThis.$claim = async function $claim(value: Object) {
+const cyanStart = "\x1b[36m";
+const cyanEnd = "\x1b[39m";
+
+const originalLog = console.log;
+console.log = (...args) => {
+  originalLog(`${cyanStart}[Thread_${pid}]${cyanEnd}`, ...args);
+};
+
+const $claim = async function $claim(value: Object) {
   const valueName = Thread.shareableNameMap.get(value)!;
 
   Thread.valueInUseCount[valueName]++;
-
-  // console.log(valueName, "claim");
 
   // First check if the variable is already (being) claimed
   if (Thread.valueClaimMap.has(valueName)) {
@@ -63,12 +63,10 @@ globalThis.$claim = async function $claim(value: Object) {
   return Thread.valueClaimMap.get(valueName)!.promise;
 };
 
-globalThis.$unclaim = function $unclaim(value: Object) {
+const $unclaim = function $unclaim(value: Object) {
   const valueName = Thread.shareableNameMap.get(value)!;
 
   if (--Thread.valueInUseCount[valueName] > 0) return;
-
-  // console.log("Unclaimed", valueName);
 
   Thread.valueClaimMap.delete(valueName);
   globalThis.postMessage({
@@ -79,6 +77,10 @@ globalThis.$unclaim = function $unclaim(value: Object) {
     },
   } satisfies ThreadEvent);
 };
+
+// Make globally available
+globalThis.$claim = $claim;
+globalThis.$unclaim = $unclaim;
 
 // Separate namespace to avoid polluting the global namespace
 // and avoid name collisions with the user defined function
@@ -124,9 +126,10 @@ namespace Thread {
     const gen = globalThis[GLOBAL_FUNCTION_NAME](...data[$.Args]);
 
     hasYield && gen.next();
-    const returnValue = await gen.next();
-
-    // console.log("Returned", returnValue.value);
+    const returnValue = await gen.next({
+      $claim,
+      $unclaim,
+    });
 
     globalThis.postMessage({
       [$.EventType]: $.Return,

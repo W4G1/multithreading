@@ -1,6 +1,6 @@
 {
   "name": "multithreading",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "description": "⚡ Multithreading functions in JavaScript, designed to be as simple and fast as possible.",
   "author": "Walter van der Giessen <waltervdgiessen@gmail.com>",
   "homepage": "https://multithreading.io",

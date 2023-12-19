@@ -20,26 +20,60 @@ type CommonGenerator<T, TReturn, TNext> =
 
 type UserFunction<T extends Array<unknown> = [], TReturn = void> = (
   ...args: T
-) => CommonGenerator<any, TReturn, void>;
+) => CommonGenerator<
+  any,
+  TReturn,
+  {
+    $claim: typeof $claim;
+    $unclaim: typeof $unclaim;
+  }
+>;
+
+interface ThreadedConfig {
+  debug: boolean;
+  maxThreads: number;
+}
 
 export function threaded<T extends Array<unknown>, TReturn>(
   fn: UserFunction<T, TReturn>
+): ((...args: T) => Promise<TReturn>) & { dispose: () => void };
+
+export function threaded<T extends Array<unknown>, TReturn>(
+  config: Partial<ThreadedConfig>,
+  fn: UserFunction<T, TReturn>
+): ((...args: T) => Promise<TReturn>) & { dispose: () => void };
+
+export function threaded<T extends Array<unknown>, TReturn>(
+  configOrFn: Partial<ThreadedConfig> | UserFunction<T, TReturn>,
+  maybeFn?: UserFunction<T, TReturn>
 ): ((...args: T) => Promise<TReturn>) & { dispose: () => void } {
+  const config: ThreadedConfig = {
+    debug: false,
+    maxThreads:
+      typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 4,
+  };
+  let fn: UserFunction<T, TReturn>;
+
+  if (typeof configOrFn === "function") {
+    fn = configOrFn as UserFunction<T, TReturn>;
+  } else {
+    Object.assign(config, configOrFn);
+    fn = maybeFn as UserFunction<T, TReturn>;
+  }
+
   let context: Record<string, any> = {};
   const workerPool: Worker[] = [];
   const invocationQueue = new Map<number, PromiseWithResolvers<TReturn>>();
 
   workerPools.set(fn, workerPool);
 
-  const workerCount =
-    typeof navigator !== "undefined" ? navigator.hardwareConcurrency : 4;
   let invocationCount = 0;
 
   const init = (async () => {
     let fnStr = fn.toString();
-    const hasDependencies = fnStr.includes("yield");
+    const hasYield = fnStr.includes("yield");
 
-    if (hasDependencies) {
+    if (hasYield) {
       // @ts-ignore - Call function without arguments
       const gen = fn();
       const result = await gen.next();
@@ -68,7 +102,7 @@ export function threaded<T extends Array<unknown>, TReturn>(
     // Polyfill for Node.js
     globalThis.Worker ??= (await import("web-worker")).default;
 
-    for (let i = 0; i < workerCount; i++) {
+    for (let i = 0; i < config.maxThreads; i++) {
       const worker = new Worker(
         "data:text/javascript;charset=utf-8," +
           encodeURIComponent(workerCode.join("\n")),
@@ -91,8 +125,9 @@ export function threaded<T extends Array<unknown>, TReturn>(
         [$.EventType]: $.Init,
         [$.EventValue]: {
           [$.ProcessId]: i,
-          [$.HasYield]: hasDependencies,
+          [$.HasYield]: hasYield,
           [$.Variables]: serializedVariables,
+          [$.DebugEnabled]: config.debug,
         },
       } satisfies MainEvent);
     }
@@ -101,7 +136,7 @@ export function threaded<T extends Array<unknown>, TReturn>(
   const wrapper = async (...args: T) => {
     await init;
 
-    const worker = workerPool[invocationCount % workerCount];
+    const worker = workerPool[invocationCount % config.maxThreads];
 
     const pwr = Promise.withResolvers<TReturn>();
     invocationQueue.set(invocationCount, pwr);
