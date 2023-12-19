@@ -1,6 +1,6 @@
 <div align="center">
 
-[![Multithreading Banner](https://github.com/W4G1/multithreading/assets/38042257/d3933381-f7bc-44ec-a856-ef5425c81c8d)](https://multithreading.io)
+[![Multithreading Banner](https://github.com/W4G1/multithreading/assets/38042257/a4eb6cae-1e78-493f-aeaa-75b6aa50edd4)](https://multithreading.io)
 
 [![License](https://img.shields.io/github/license/W4G1/multithreading)](https://github.com/W4G1/multithreading/blob/main/LICENSE.md)
 [![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)](https://www.npmjs.com/package/multithreading)
