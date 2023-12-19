@@ -18,6 +18,13 @@ With a minified size of only 4.5kb, it has first class support for [Node.js](htt
 
 Depending on the environment, it uses [Worker Threads](https://nodejs.org/api/worker_threads.html) or [Web Workers](https://developer.mozilla.org/en-US/docs/Web/API/Worker). In addition to [ES6 generators](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function*) to make multithreading as simple as possible.
 
+### The State of Multithreading in JavaScript
+
+JavaScript's single-threaded nature means that tasks are executed one after the other, leading to potential performance bottlenecks and underutilized CPU resources. While Web Workers and Worker Threads offer a way to offload tasks to separate threads, managing the communication between these threads and their state is often complex and error-prone.
+
+This project aims to solve these challenges by providing an intuitive Web Worker abstraction that mirrors the behavior of regular JavaScript functions.
+This way it feels like you're executing a regular function, but in reality, it's running in parallel on a separate threads.
+
 ## Installation
 
 ```bash
