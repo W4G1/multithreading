@@ -24,16 +24,9 @@ Depending on the environment, it uses [Worker Threads](https://nodejs.org/api/wo
 npm install multithreading
 ```
 
-#### Node.js
-To use the `multithreading` package with Node.js, and to keep the bundle size as small as possible, it is necessary to install the [web-worker](https://www.npmjs.com/package/web-worker) package separately because Node.js does not support web workers by default.
-
-```bash
-npm install web-worker
-```
-
 ## Usage
 
-#### Minimal example
+#### Basic example
 
 ```js
 import { threaded } from "multithreading";
@@ -112,7 +105,7 @@ await Promise.all([
 
 console.log(user.balance); // 15
 ```
-In this example, the `addBalance` function integrates the external `add` function into a multithreaded environment. The `yield` statement is used to declare external dependencies, ensuring that the required functions and data are available to the threaded function.
+In this example, the `add` function is used within the multithreaded `addBalance` function. The `yield` statement is used to declare external dependencies, ensuring that the required functions and data are available to the threaded function.
 
 As with previous examples, the shared state is managed using `$claim` and `$unclaim` to guarantee proper synchronization and prevent data conflicts.
 
