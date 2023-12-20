@@ -11,6 +11,7 @@ import {
   ThreadEvent,
 } from "./types";
 import { replaceContents } from "./replaceContents.ts";
+import { getErrorPreview } from "./getErrorPreview.ts";
 
 declare var pid: number;
 
@@ -35,12 +36,17 @@ globalThis.onmessage = async (e: MessageEvent<MainEvent>) => {
   }
 };
 
-const cyanStart = "\x1b[36m";
-const cyanEnd = "\x1b[39m";
+const colorCyan = "\x1b[36m";
+const colorRed = "\x1b[31m";
+const colorReset = "\x1b[39m";
 
 const originalLog = console.log;
 console.log = (...args) => {
-  originalLog(`${cyanStart}[Thread_${pid}]${cyanEnd}`, ...args);
+  originalLog(`${colorCyan}[Thread_${pid}]${colorReset}`, ...args);
+};
+const originalError = console.error;
+console.error = (...args) => {
+  originalError(`${colorRed}[Thread_${pid}]${colorReset}`, ...args);
 };
 
 const $claim = async function $claim(value: Object) {
@@ -125,11 +131,17 @@ namespace Thread {
   ): Promise<void> {
     const gen = globalThis[GLOBAL_FUNCTION_NAME](...data[$.Args]);
 
-    hasYield && gen.next();
-    const returnValue = await gen.next({
-      $claim,
-      $unclaim,
-    });
+    let returnValue = { value: undefined };
+
+    try {
+      hasYield && gen.next();
+      returnValue = await gen.next({
+        $claim,
+        $unclaim,
+      });
+    } catch (error) {
+      console.error(getErrorPreview(error));
+    }
 
     globalThis.postMessage({
       [$.EventType]: $.Return,

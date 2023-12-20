@@ -15,6 +15,7 @@ export default ["cjs"].flatMap((type) => {
           replace({
             __INLINE_WORKER__: fs
               .readFileSync(`.temp/worker.${type}${version}.js`, "utf8")
+              .replaceAll("\\", "\\\\")
               .replaceAll("`", "\\`")
               .replaceAll("$", "\\$"),
           }),
