@@ -1,3 +1,4 @@
+// import { pathToFileURL } from "url";
 import "./polyfills/Promise.withResolvers.ts";
 import { GLOBAL_FUNCTION_NAME } from "../constants.ts";
 import { deserialize } from "./serialize.ts";
@@ -9,11 +10,17 @@ import {
   MainEvent,
   SynchronizationEvent,
   ThreadEvent,
+  YieldList,
 } from "./types";
 import { replaceContents } from "./replaceContents.ts";
 import { getErrorPreview } from "./getErrorPreview.ts";
+// import { createRequire } from "module";
+
+// const require = createRequire(import.meta.url);
+// globalThis.require = require;
 
 declare var pid: number;
+globalThis.pid = -1;
 
 declare global {
   var pid: number;
@@ -91,7 +98,8 @@ globalThis.$unclaim = $unclaim;
 // Separate namespace to avoid polluting the global namespace
 // and avoid name collisions with the user defined function
 namespace Thread {
-  let hasYield = false;
+  let yieldList: YieldList = [];
+  let code: string = "";
 
   export const shareableNameMap = new WeakMap<Object, string>();
 
@@ -111,7 +119,8 @@ namespace Thread {
   }
 
   export async function handleInit(data: InitEvent[$.EventValue]) {
-    hasYield = data[$.HasYield];
+    yieldList = data[$.YieldList];
+    code = data[$.Code];
     globalThis.pid = data[$.ProcessId];
     const variables = deserialize(data[$.Variables]);
 
@@ -129,25 +138,55 @@ namespace Thread {
   export async function handleInvocation(
     data: InvocationEvent[$.EventValue]
   ): Promise<void> {
-    const gen = globalThis[GLOBAL_FUNCTION_NAME](...data[$.Args]);
+    const gen: AsyncGenerator = globalThis[GLOBAL_FUNCTION_NAME](
+      ...data[$.Args]
+    );
 
-    let returnValue = { value: undefined };
+    let isDone = false;
+    let returnValue = undefined;
+    let isFirstImport = true;
 
     try {
-      hasYield && gen.next();
-      returnValue = await gen.next({
-        $claim,
-        $unclaim,
-      });
+      for (const yieldItem of yieldList) {
+        if (yieldItem[$.Type] === "import") {
+          const resolved = await import(yieldItem[$.AbsolutePath]);
+
+          if (isFirstImport) {
+            await gen.next();
+            isFirstImport = false;
+          }
+
+          const result = await gen.next(resolved);
+
+          if (result.done) {
+            isDone = true;
+            returnValue = result.value;
+            break;
+          }
+        } else {
+          const result = await gen.next();
+
+          if (result.done) {
+            isDone = true;
+            returnValue = result.value;
+            break;
+          }
+        }
+      }
+
+      if (!isDone) {
+        const result = await gen.next();
+        returnValue = result.value;
+      }
     } catch (error) {
-      console.error(getErrorPreview(error));
+      console.error(getErrorPreview(error, code));
     }
 
     globalThis.postMessage({
       [$.EventType]: $.Return,
       [$.EventValue]: {
         [$.InvocationId]: data[$.InvocationId],
-        [$.Value]: returnValue.value,
+        [$.Value]: returnValue,
       },
     } satisfies ThreadEvent);
   }

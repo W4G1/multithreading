@@ -22,7 +22,7 @@ describe("Edge case tests", () => {
     };
 
     const add = threaded(function* (a, b) {
-      yield { user };
+      yield user;
       return a + b;
     });
 
@@ -69,25 +69,13 @@ describe("Edge case tests", () => {
     add.dispose();
   });
 
-  // test("Yielding with parameters", async () => {
-  //   const add = threaded(function* (a, b) {
-  //     yield { a, b };
-
-  //     return a + b;
-  //   });
-
-  //   expect(await add(1, 2)).toBe(3);
-
-  //   add.dispose();
-  // });
-
   test("No return but yielding", async () => {
     const user = {
       name: "john",
     };
 
     const add = threaded(function* () {
-      yield { user };
+      yield user;
     });
 
     expect(await add()).toBe(undefined);

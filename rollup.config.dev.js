@@ -3,6 +3,11 @@ import replace from "@rollup/plugin-replace";
 import fs from "node:fs";
 import swc from "@rollup/plugin-swc";
 
+const bundleResolve = {
+  esm: "import.meta.resolve",
+  cjs: "require.resolve",
+};
+
 export default ["cjs"].flatMap((type) => {
   const ext = type === "esm" ? "mjs" : "js";
   return [""].map(
@@ -10,6 +15,7 @@ export default ["cjs"].flatMap((type) => {
       /** @type {import('rollup').RollupOptions} */ ({
         input: `src/index.ts`,
         treeshake: version === ".min",
+
         plugins: [
           swc(),
           replace({
@@ -19,6 +25,13 @@ export default ["cjs"].flatMap((type) => {
               .replaceAll("`", "\\`")
               .replaceAll("$", "\\$"),
           }),
+          {
+            resolveImportMeta(prop, { format }) {
+              if (prop === "resolve") {
+                return bundleResolve[format];
+              }
+            },
+          },
         ],
         output: [
           {
@@ -26,7 +39,7 @@ export default ["cjs"].flatMap((type) => {
             format: type,
             sourcemap: false,
             name: "multithreading",
-            dynamicImportInCjs: false,
+            dynamicImportInCjs: true,
             globals: {
               "web-worker": "Worker",
             },

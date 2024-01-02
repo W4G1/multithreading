@@ -57,7 +57,7 @@ const user = {
 };
 
 const add = threaded(async function* (amount) {
-  yield { user }; // Specify dependencies
+  yield user; // Add user to dependencies
 
   await $claim(user); // Wait for write lock
 
@@ -95,7 +95,8 @@ const user = {
 };
 
 const addBalance = threaded(async function* (amount) {
-  yield { user, add }; // Add to dependencies
+  yield user;
+  yield add; // Add external function to dependencies
 
   await $claim(user);
 
@@ -126,26 +127,16 @@ When using external modules, you can dynamically import them by using the `impor
 import { threaded } from "multithreading";
 
 const getId = threaded(async function* () {
-  yield {};
+  const { v4 } = yield "uuid"; // Import other package
 
-  const uuid = await import("uuid"); // Import other package
-
-  return uuid.v4();
+  return v4();
 }
 
 console.log(await getId()); // 1a107623-3052-4f61-aca9-9d9388fb2d81
 ```
 
-### Usage with Svelte
-
-Svelte disallows imports whose name start with a `$`. To use multithreading with Svelte, you can also retrieve `$claim` and `$unclaim` directly from the `yield` statement.
-
+You can also import external modules in a variety of other ways:
 ```js
-import { threaded } from "multithreading";
-
-const fn = threaded(function* () {
-  const { $claim, $unclaim } = yield {};
-
-  // ...
-}
+const { v4 } = yield "npm:uuid"; // Using npm specifier (available in Deno)
+const { v4 } = yield "https://esm.sh/uuid"; // From CDN url (available in browser and Deno)
 ```

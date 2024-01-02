@@ -41,14 +41,14 @@ export default [
         file: ".temp/worker.cjs.js",
         format: "cjs",
         sourcemap: false,
-        dynamicImportInCjs: false,
+        dynamicImportInCjs: true,
         name: "multithreading",
       },
       {
         file: ".temp/worker.cjs.min.js",
         format: "cjs",
         sourcemap: false,
-        dynamicImportInCjs: false,
+        dynamicImportInCjs: true,
         plugins: [
           terser({
             compress: {

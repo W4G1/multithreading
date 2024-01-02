@@ -1,6 +1,6 @@
 {
   "name": "multithreading",
-  "version": "0.1.16",
+  "version": "0.2.0",
   "description": "⚡ Multithreading functions in JavaScript to speedup heavy workloads, designed to feel like writing vanilla functions.",
   "author": "Walter van der Giessen <waltervdgiessen@gmail.com>",
   "homepage": "https://multithreading.io",
@@ -50,7 +50,8 @@
     "rollup": "^4.8.0",
     "rollup-plugin-ts": "^3.4.5",
     "tslib": "^2.6.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "uuid": "^9.0.1"
   },
   "scripts": {
     "build:worker": "rimraf .temp && rollup -c rollup.config.worker.js --configPlugin @rollup/plugin-swc",
@@ -67,5 +68,6 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.9.1"
-  }
+  },
+  "dependencies": {}
 }

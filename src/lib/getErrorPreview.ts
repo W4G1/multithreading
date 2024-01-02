@@ -1,24 +1,30 @@
+const colorGray = "\x1b[90m";
 const colorRed = "\x1b[31m";
+const colorCyan = "\x1b[36m";
 const colorReset = "\x1b[39m";
 
-export function getErrorPreview(error: Error) {
+export function getErrorPreview(error: Error, code: string) {
   const [message, ...serializedStackFrames] = error.stack!.split("\n");
 
-  const stackFrame = decodeURIComponent(serializedStackFrames[0]);
-
-  const [functionPart, ...otherParts] = stackFrame.split(
-    " (data:text/javascript;charset=utf-8,"
+  // Check if error originates from inside the user function
+  const stackFrame = serializedStackFrames.find((frame) =>
+    frame.includes("data:application/javascript;base64")
   );
 
-  const other = otherParts.join();
-  const codeLines = other.split(/\r?\n/);
-  const lastLine = codeLines.pop()!;
+  if (!stackFrame) {
+    return error.stack!;
+  }
 
-  const [lineNumber, columnNumber] = lastLine
-    .slice(0, -1)
-    .split(":")
-    .slice(-2)
-    .map((n) => parseInt(n));
+  // Split at the comma of data:application/javascript;base64,
+  const [functionPart, tracePart] = stackFrame.split(",");
+
+  const [encodedBodyPart, lineNumberStr, columnNumberStr] =
+    tracePart.split(":");
+
+  const lineNumber = parseInt(lineNumberStr);
+  const columnNumber = parseInt(columnNumberStr);
+
+  const codeLines = code.split(/\r?\n/);
 
   const amountOfPreviousLines = Math.min(3, lineNumber - 1);
   const amountOfNextLines = 2;
@@ -38,12 +44,18 @@ export function getErrorPreview(error: Error) {
       " ".repeat(columnNumber - 1) +
       "^".repeat(previousLineLength) +
       " " +
+      // "Error" +
       message +
-      colorReset
+      colorGray
   );
 
-  const preview =
-    `${error.name} ${functionPart.trim()}:\n\n` + previewLines.join("\n");
+  const index = serializedStackFrames.indexOf(stackFrame);
+  serializedStackFrames[index] =
+    `    at ${colorCyan}<user function>${colorReset}\n` +
+    colorGray +
+    "    " +
+    previewLines.join("\n    ") +
+    colorReset;
 
-  return preview;
+  return message + "\n" + serializedStackFrames.slice(0, index + 1).join("\n");
 }

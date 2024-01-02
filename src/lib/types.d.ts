@@ -1,5 +1,17 @@
 import * as $ from "./keys.ts";
 
+type ImportYield = {
+  [$.Type]: "import";
+  [$.Name]: string;
+  [$.AbsolutePath]: string;
+};
+type VariableYield = {
+  [$.Type]: "variable";
+  [$.Name]: string;
+};
+
+type YieldList = (ImportYield | VariableYield)[];
+
 interface ReturnEvent {
   [$.EventType]: $.Return;
   [$.EventValue]: {
@@ -12,8 +24,9 @@ interface InitEvent {
   [$.EventType]: $.Init;
   [$.EventValue]: {
     [$.ProcessId]: number;
-    [$.HasYield]: boolean;
+    [$.YieldList]: YieldList;
     [$.Variables]: Record<string, any>;
+    [$.Code]: string;
     [$.DebugEnabled]: boolean;
   };
 }

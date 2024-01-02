@@ -10,7 +10,7 @@ export default [
         file: ".temp/worker.cjs.js",
         format: "cjs",
         sourcemap: false,
-        dynamicImportInCjs: false,
+        dynamicImportInCjs: true,
         name: "multithreading",
       },
     ],

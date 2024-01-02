@@ -1,1 +1,1 @@
-export const GLOBAL_FUNCTION_NAME = "__multithreading_fn__";
+export const GLOBAL_FUNCTION_NAME = "__user_function__";

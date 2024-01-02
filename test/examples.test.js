@@ -23,7 +23,7 @@ describe("Example tests", () => {
     };
 
     const add = threaded(async function* (amount) {
-      yield { user }; // Specify dependencies
+      yield user; // Specify dependencies
 
       await $claim(user); // Wait for write lock
 
@@ -51,7 +51,8 @@ describe("Example tests", () => {
     };
 
     const addBalance = threaded(async function* (amount) {
-      yield { user, add }; // Add to dependencies
+      yield user;
+      yield add;
 
       await $claim(user);
 

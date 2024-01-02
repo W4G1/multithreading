@@ -6,6 +6,11 @@ import swc from "@rollup/plugin-swc";
 import fs from "node:fs";
 import ts from "rollup-plugin-ts";
 
+const bundleResolve = {
+  esm: "import.meta.resolve",
+  cjs: "require.resolve",
+};
+
 export default ["esm", "cjs"].flatMap((type) => {
   const ext = type === "esm" ? "mjs" : "js";
   return ["", ".min"].map(
@@ -37,6 +42,13 @@ export default ["esm", "cjs"].flatMap((type) => {
               .replaceAll("`", "\\`")
               .replaceAll("$", "\\$"),
           }),
+          {
+            resolveImportMeta(prop, { format }) {
+              if (prop === "resolve") {
+                return bundleResolve[format];
+              }
+            },
+          },
         ],
         output: [
           {

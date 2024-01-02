@@ -4,6 +4,7 @@ import { GLOBAL_FUNCTION_NAME } from "./constants.ts";
 import * as $ from "./lib/keys.ts";
 import { MainEvent } from "./lib/types";
 import { setupWorkerListeners } from "./lib/setupWorkerListeners.ts";
+import { parseTopLevelYieldStatements } from "./lib/parseTopLevelYieldStatements.ts";
 
 const INLINE_WORKER = `__INLINE_WORKER__`;
 
@@ -70,14 +71,20 @@ export function threaded<T extends Array<unknown>, TReturn>(
   let invocationCount = 0;
 
   const init = (async () => {
-    let fnStr = fn.toString();
-    const hasYield = fnStr.includes("yield");
+    const fnStr = fn.toString();
 
-    if (hasYield) {
-      // @ts-ignore - Call function without arguments
-      const gen = fn();
-      const result = await gen.next();
-      context = result.value;
+    const yieldList = parseTopLevelYieldStatements(fnStr);
+
+    // @ts-ignore - Call function without arguments
+    const gen = fn();
+
+    for (const yieldItem of yieldList) {
+      // @ts-ignore - Pass empty object to prevent TypeError when user has destructured import
+      const result = await gen.next({});
+
+      if (yieldItem[$.Type] !== "variable") continue;
+
+      context[yieldItem[$.Name]] = result.value;
     }
 
     for (const key in context) {
@@ -86,15 +93,15 @@ export function threaded<T extends Array<unknown>, TReturn>(
     }
 
     const workerCode = [
-      `globalThis.${GLOBAL_FUNCTION_NAME} = ${fnStr}`,
-      INLINE_WORKER,
+      `globalThis.${GLOBAL_FUNCTION_NAME} = ${fnStr};`,
+      INLINE_WORKER + "",
     ];
 
     const serializedVariables = serialize(context);
 
     for (const [key, value] of Object.entries(serializedVariables)) {
       if (value[$.WasType] !== $.Function) continue;
-      workerCode.unshift(`globalThis.${key} = ${value.value}`);
+      workerCode.unshift(`globalThis.${key} = ${value.value};`);
 
       delete serializedVariables[key];
     }
@@ -102,10 +109,13 @@ export function threaded<T extends Array<unknown>, TReturn>(
     // Polyfill for Node.js
     globalThis.Worker ??= (await import("web-worker")).default;
 
+    const workerCodeString = workerCode.join("\r\n");
+
     for (let i = 0; i < config.maxThreads; i++) {
       const worker = new Worker(
-        "data:text/javascript;charset=utf-8," +
-          encodeURIComponent(workerCode.join("\n")),
+        encodeURI(
+          "data:application/javascript;base64," + btoa(workerCodeString)
+        ),
         {
           type: "module",
         }
@@ -125,8 +135,9 @@ export function threaded<T extends Array<unknown>, TReturn>(
         [$.EventType]: $.Init,
         [$.EventValue]: {
           [$.ProcessId]: i,
-          [$.HasYield]: hasYield,
+          [$.YieldList]: yieldList,
           [$.Variables]: serializedVariables,
+          [$.Code]: workerCodeString,
           [$.DebugEnabled]: config.debug,
         },
       } satisfies MainEvent);
