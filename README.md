@@ -121,7 +121,7 @@ As with previous examples, the shared state is managed using `$claim` and `$uncl
 
 ### Using imports from external packages
 
-When using external modules, you can dynamically import them by using the `import()` statement. This is useful when you want to use other packages within a threaded function.
+When using external modules, you can dynamically import them by using `yield "some-package"`. This is useful when you want to use other packages within a threaded function.
 
 ```js
 import { threaded } from "multithreading";
@@ -140,3 +140,8 @@ You can also import external modules in a variety of other ways:
 const { v4 } = yield "npm:uuid"; // Using npm specifier (available in Deno)
 const { v4 } = yield "https://esm.sh/uuid"; // From CDN url (available in browser and Deno)
 ```
+
+## Enhanced Error Handling
+Errors inside threads are automatically injected with a pretty stack trace.
+This makes it easier to identify which line of your function caused the error, and in which thread the error occured.
+![Example of an enhanced stack trace](https://github.com/W4G1/multithreading/assets/38042257/41581ecf-fb1e-4022-b002-f9a4159bb1a4)
