@@ -144,4 +144,5 @@ const { v4 } = yield "https://esm.sh/uuid"; // From CDN url (available in browse
 ## Enhanced Error Handling
 Errors inside threads are automatically injected with a pretty stack trace.
 This makes it easier to identify which line of your function caused the error, and in which thread the error occured.
-![Example of an enhanced stack trace](https://github.com/W4G1/multithreading/assets/38042257/41581ecf-fb1e-4022-b002-f9a4159bb1a4)
+
+![Example of an enhanced stack trace](https://github.com/W4G1/multithreading/assets/38042257/4ee4ebb3-6b06-48ab-aa4c-a062521c9711)
