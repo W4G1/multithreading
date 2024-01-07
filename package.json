@@ -16,11 +16,11 @@
     "worker-threads"
   ],
   "types": "./dist/index.d.ts",
-  "module": "./dist/index.js",
+  "module": "./dist/index.mjs",
   "main": "./dist/index.js",
   "exports": {
     "types": "./dist/index.d.ts",
-    "import": "./dist/index.js",
+    "import": "./dist/index.mjs",
     "require": "./dist/index.js"
   },
   "files": [
