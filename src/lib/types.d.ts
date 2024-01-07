@@ -1,5 +1,14 @@
 import * as $ from "./keys.ts";
 
+// Either AsyncGenerator or Generator
+type CommonGenerator<T, TReturn, TNext> =
+  | AsyncGenerator<T, TReturn, TNext>
+  | Generator<T, TReturn, TNext>;
+
+type UserFunction<T = any, TReturn = any> = (
+  ...args: T
+) => CommonGenerator<any, TReturn, unknown>;
+
 type ImportYield = {
   [$.Type]: "import";
   [$.Name]: string;
@@ -68,9 +77,14 @@ interface SynchronizationEvent {
   };
 }
 
+interface ErrorEvent {
+  [$.EventType]: $.Error;
+  [$.EventValue]: any;
+}
+
 type MainEvent =
   | InitEvent
   | InvocationEvent
   | ClaimAcceptanceEvent
   | SynchronizationEvent;
-type ThreadEvent = ReturnEvent | ClaimEvent | UnclaimEvent;
+type ThreadEvent = ReturnEvent | ClaimEvent | UnclaimEvent | ErrorEvent;

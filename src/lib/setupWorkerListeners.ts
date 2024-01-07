@@ -6,6 +6,8 @@ import {
 } from "./types";
 import { replaceContents } from "./replaceContents.ts";
 import * as $ from "./keys.ts";
+import { getErrorPreview } from "./getErrorPreview.ts";
+import { red, reset } from "./colors.ts";
 
 function announceOwnership(queue: Worker[], valueName: string, value: Object) {
   // Get first worker in queue
@@ -25,7 +27,9 @@ export function setupWorkerListeners<TReturn>(
   context: Record<string, any>,
   valueOwnershipQueue: WeakMap<Object, Worker[]>,
   invocationQueue: Map<number, PromiseWithResolvers<TReturn>>,
-  workerPool: Worker[]
+  workerPool: Worker[],
+  workerCodeString: string,
+  pid: number
 ) {
   worker.onmessage = (e: MessageEvent<ThreadEvent>) => {
     switch (e.data[$.EventType]) {
@@ -81,10 +85,12 @@ export function setupWorkerListeners<TReturn>(
         }
         break;
       }
+      case $.Error: {
+        const error = e.data[$.EventValue];
+        error.message = getErrorPreview(error as Error, workerCodeString, pid);
+        error.stack = ""; // Deno doesn't like custom stack traces, use message instead
+        invocationQueue.forEach(({ reject }) => reject(error));
+      }
     }
-  };
-
-  worker.onerror = (err) => {
-    invocationQueue.forEach(({ reject }) => reject(err));
   };
 }

@@ -1,6 +1,6 @@
 {
   "name": "multithreading",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "⚡ Multithreading functions in JavaScript to speedup heavy workloads, designed to feel like writing vanilla functions.",
   "author": "Walter van der Giessen <waltervdgiessen@gmail.com>",
   "homepage": "https://multithreading.io",
@@ -16,11 +16,11 @@
     "worker-threads"
   ],
   "types": "./dist/index.d.ts",
-  "module": "./dist/index.mjs",
+  "module": "./dist/index.js",
   "main": "./dist/index.js",
   "exports": {
     "types": "./dist/index.d.ts",
-    "import": "./dist/index.mjs",
+    "import": "./dist/index.js",
     "require": "./dist/index.js"
   },
   "files": [
@@ -44,6 +44,7 @@
     "@rollup/plugin-swc": "^0.3.0",
     "@rollup/plugin-terser": "^0.4.4",
     "@types/node": "^20.10.4",
+    "cross-env": "^7.0.3",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",
     "rimraf": "^5.0.5",
@@ -58,16 +59,12 @@
     "build": "npm run build:worker && rollup -c rollup.config.js --configPlugin @rollup/plugin-swc && rimraf .temp",
     "dev": "nodemon",
     "prepublishOnly": "npm run build",
-    "test": "jest"
+    "test": "cross-env NODE_OPTIONS=\"$NODE_OPTIONS --experimental-vm-modules\" jest"
   },
   "bugs": {
     "url": "https://github.com/W4G1/multithreading/issues"
   },
-  "peerDependencies": {
-    "web-worker": "^1.2.0"
-  },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.9.1"
-  },
-  "dependencies": {}
+  }
 }

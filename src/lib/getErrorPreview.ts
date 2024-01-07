@@ -3,7 +3,7 @@ const colorRed = "\x1b[31m";
 const colorCyan = "\x1b[36m";
 const colorReset = "\x1b[39m";
 
-export function getErrorPreview(error: Error, code: string) {
+export function getErrorPreview(error: Error, code: string, pid: number) {
   const [message, ...serializedStackFrames] = error.stack!.split("\n");
 
   // Check if error originates from inside the user function
@@ -51,11 +51,16 @@ export function getErrorPreview(error: Error, code: string) {
 
   const index = serializedStackFrames.indexOf(stackFrame);
   serializedStackFrames[index] =
-    `    at ${colorCyan}<user function>${colorReset}\n` +
+    `    at ${colorCyan}<Thread_${pid}>${colorReset}\n` +
     colorGray +
     "    " +
     previewLines.join("\n    ") +
     colorReset;
 
-  return message + "\n" + serializedStackFrames.slice(0, index + 1).join("\n");
+  // return message + "\n" + serializedStackFrames.slice(0, index + 1).join("\n");
+  return (
+    message.split(":").slice(1).join(":").trim() +
+    "\n" +
+    serializedStackFrames.slice(0, index + 1).join("\n")
+  );
 }

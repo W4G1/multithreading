@@ -46,7 +46,6 @@ export default ["cjs"].flatMap((type) => {
             plugins: [...(version === ".min" ? [terser()] : [])],
           },
         ],
-        external: ["web-worker"],
       })
   );
 });

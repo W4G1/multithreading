@@ -1,34 +1,20 @@
 import "./lib/polyfills/Promise.withResolvers.ts";
+import "./lib/polyfills/import.meta.resolve.ts";
+import "./lib/polyfills/web-worker.ts";
+
 import { serialize } from "./lib/serialize.ts";
-import { GLOBAL_FUNCTION_NAME } from "./constants.ts";
 import * as $ from "./lib/keys.ts";
-import { MainEvent } from "./lib/types";
+import { MainEvent, UserFunction } from "./lib/types";
 import { setupWorkerListeners } from "./lib/setupWorkerListeners.ts";
 import { parseTopLevelYieldStatements } from "./lib/parseTopLevelYieldStatements.ts";
 
-const INLINE_WORKER = `__INLINE_WORKER__`;
+const inlineWorker = `__INLINE_WORKER__`;
 
 export async function $claim(value: Object) {}
 export function $unclaim(value: Object) {}
 
-const workerPools = new WeakMap<Function, Worker[]>();
+const workerPools = new WeakMap<UserFunction, Worker[]>();
 const valueOwnershipQueue = new WeakMap<Object, Worker[]>();
-
-// Either AsyncGenerator or Generator
-type CommonGenerator<T, TReturn, TNext> =
-  | AsyncGenerator<T, TReturn, TNext>
-  | Generator<T, TReturn, TNext>;
-
-type UserFunction<T extends Array<unknown> = [], TReturn = void> = (
-  ...args: T
-) => CommonGenerator<
-  any,
-  TReturn,
-  {
-    $claim: typeof $claim;
-    $unclaim: typeof $unclaim;
-  }
->;
 
 interface ThreadedConfig {
   debug: boolean;
@@ -73,7 +59,7 @@ export function threaded<T extends Array<unknown>, TReturn>(
   const init = (async () => {
     const fnStr = fn.toString();
 
-    const yieldList = parseTopLevelYieldStatements(fnStr);
+    const yieldList = await parseTopLevelYieldStatements(fnStr);
 
     // @ts-ignore - Call function without arguments
     const gen = fn();
@@ -93,26 +79,24 @@ export function threaded<T extends Array<unknown>, TReturn>(
     }
 
     const workerCode = [
-      `globalThis.${GLOBAL_FUNCTION_NAME} = ${fnStr};`,
-      INLINE_WORKER + "",
+      inlineWorker,
+      `__internal.${$.UserFunction} = ${fnStr};`,
     ];
 
     const serializedVariables = serialize(context);
 
     for (const [key, value] of Object.entries(serializedVariables)) {
       if (value[$.WasType] !== $.Function) continue;
+      // globalthis. is necessary to prevent duplicate variable names when the function is named
       workerCode.unshift(`globalThis.${key} = ${value.value};`);
 
       delete serializedVariables[key];
     }
 
-    // Polyfill for Node.js
-    globalThis.Worker ??= (await import("web-worker")).default;
-
     const workerCodeString = workerCode.join("\r\n");
 
     for (let i = 0; i < config.maxThreads; i++) {
-      const worker = new Worker(
+      const worker = new (await Worker)(
         encodeURI(
           "data:application/javascript;base64," + btoa(workerCodeString)
         ),
@@ -126,7 +110,9 @@ export function threaded<T extends Array<unknown>, TReturn>(
         context,
         valueOwnershipQueue,
         invocationQueue,
-        workerPool
+        workerPool,
+        workerCodeString,
+        i
       );
 
       workerPool.push(worker);

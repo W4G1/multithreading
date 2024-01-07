@@ -50,13 +50,14 @@ export default ["esm", "cjs"].flatMap((type) => {
             },
           },
         ],
+
         output: [
           {
             file: `dist/index${version}.${ext}`,
             format: type,
             sourcemap: false,
             name: "multithreading",
-            dynamicImportInCjs: false,
+            dynamicImportInCjs: true,
             globals: {
               "web-worker": "Worker",
             },
@@ -66,15 +67,15 @@ export default ["esm", "cjs"].flatMap((type) => {
                     terser({
                       compress: {
                         toplevel: true,
-                        passes: 3,
+                        passes: 2,
                       },
+                      mangle: {},
                     }),
                   ]
                 : []),
             ],
           },
         ],
-        external: ["web-worker"],
       })
   );
 });

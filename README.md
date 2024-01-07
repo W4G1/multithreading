@@ -113,7 +113,7 @@ await Promise.all([
 
 console.log(user.balance); // 15
 ```
-In this example, the `add` function is used within the multithreaded `addBalance` function. The `yield` statement is used to declare external dependencies, ensuring that the required functions and data are available to the threaded function.
+In this example, the `add` function is used within the multithreaded `addBalance` function. The `yield` statement is used to declare external dependencies. You can think of it as a way to import external data, functions or even packages.
 
 As with previous examples, the shared state is managed using `$claim` and `$unclaim` to guarantee proper synchronization and prevent data conflicts.
 

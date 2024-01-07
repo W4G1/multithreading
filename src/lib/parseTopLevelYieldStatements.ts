@@ -1,9 +1,8 @@
-import { pathToFileURL } from "node:url";
 import * as $ from "./keys.ts";
 import { YieldList } from "./types";
 
-function parseImport(name: string): string {
-  const resolved = import.meta.resolve(name);
+async function parseImport(name: string): Promise<string> {
+  const resolved = await import.meta.resolve(name);
 
   if (
     resolved.startsWith("http://") ||
@@ -13,10 +12,22 @@ function parseImport(name: string): string {
   )
     return resolved;
 
+  // Check if running in browser
+  const isBrowser = typeof window !== "undefined";
+
+  if (isBrowser) {
+    // If running in browser, return the resolved URL
+    return resolved;
+  }
+
+  const { pathToFileURL } = await import("node:url");
+
   return pathToFileURL(resolved).toString();
 }
 
-export function parseTopLevelYieldStatements(fnStr: string): YieldList {
+export async function parseTopLevelYieldStatements(
+  fnStr: string
+): Promise<YieldList> {
   const bodyStart = fnStr.indexOf("{") + 1;
   const code = fnStr.slice(bodyStart, -1).trim();
   const lines = code.split(/(?:\s*[;\r\n]+\s*)+/);
@@ -45,7 +56,7 @@ export function parseTopLevelYieldStatements(fnStr: string): YieldList {
       yieldList.push({
         [$.Type]: "import",
         [$.Name]: name,
-        [$.AbsolutePath]: parseImport(name),
+        [$.AbsolutePath]: await parseImport(name),
       });
     } else {
       yieldList.push({

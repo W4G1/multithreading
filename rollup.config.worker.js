@@ -53,8 +53,9 @@ export default [
           terser({
             compress: {
               toplevel: true,
-              passes: 3,
+              passes: 2,
             },
+            mangle: {},
           }),
         ],
         name: "multithreading",
