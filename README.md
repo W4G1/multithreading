@@ -1,6 +1,6 @@
 <div align="center">
 
-[![Multithreading Banner](https://github.com/W4G1/multithreading/assets/38042257/7ac93af7-cf81-48fb-b727-61c375b108ba)](https://multithreading.io)
+[![Multithreading Banner](https://github.com/W4G1/multithreading/assets/38042257/ead29359-37c3-4fd2-819b-349ddeec5524)](https://multithreading.io)
 
 [![License](https://img.shields.io/github/license/W4G1/multithreading)](https://github.com/W4G1/multithreading/blob/main/LICENSE.md)
 [![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)](https://www.npmjs.com/package/multithreading)
@@ -145,4 +145,4 @@ const { v4 } = yield "https://esm.sh/uuid"; // From CDN url (available in browse
 Errors inside threads are automatically injected with a pretty stack trace.
 This makes it easier to identify which line of your function caused the error, and in which thread the error occured.
 
-![Example of an enhanced stack trace](https://github.com/W4G1/multithreading/assets/38042257/4ee4ebb3-6b06-48ab-aa4c-a062521c9711)
+![Example of an enhanced stack trace](https://github.com/W4G1/multithreading/assets/38042257/4c5b3352-ad19-4270-86e4-dad6fc6e0fe6)
