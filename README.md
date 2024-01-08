@@ -126,7 +126,10 @@ When using external modules, you can dynamically import them by using `yield "so
 ```js
 import { threaded } from "multithreading";
 
-const getId = threaded(async function* () {
+const getId = threaded(function* () {
+  /**
+   * @type {import("uuid")}
+   */
   const { v4 } = yield "uuid"; // Import other package
 
   return v4();
