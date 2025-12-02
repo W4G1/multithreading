@@ -5,8 +5,8 @@ import {
   Worker as NodeWorker,
 } from "node:worker_threads";
 
-const isNode = typeof process !== "undefined" &&
-  typeof process?.versions?.node === "string" &&
+const isNode = typeof globalThis.process !== "undefined" &&
+  typeof globalThis.process?.versions?.node === "string" &&
   !("Deno" in globalThis) &&
   !("Bun" in globalThis);
 
