@@ -1,15 +1,16 @@
 /**
- * Parses source code and patches dynamic imports to resolve relative
- * to a specific callerLocation using import.meta.url.
+ * Patches dynamic imports to work in Data URIs / Workers.
+ * Universal version: Works in Browser, Deno, and Node.js.
  */
 export function patchDynamicImports(
   code: string,
   callerLocation: string,
 ): string {
-  // Normalize callerLocation to be a valid URL.
+  // 0. Normalize callerLocation to be a valid URL (file:// or http://).
   let normalizedCaller = callerLocation;
 
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalizedCaller)) {
+    // Windows fix
     normalizedCaller = normalizedCaller.replace(/\\/g, "/");
     if (!normalizedCaller.startsWith("/")) {
       normalizedCaller = "/" + normalizedCaller;
@@ -17,18 +18,13 @@ export function patchDynamicImports(
     normalizedCaller = "file://" + normalizedCaller;
   }
 
-  // Find all occurrences of "import("
   const importStartPattern = /\bimport\s*\(/g;
-
   const replacements: { start: number; end: number; text: string }[] = [];
   let match: RegExpExecArray | null;
 
-  // Iterate through matches
   while ((match = importStartPattern.exec(code)) !== null) {
     const importStartIndex = match.index;
     const openParenIndex = importStartIndex + match[0].length - 1;
-
-    // Extract the first argument safely
     const argBounds = findArgumentBounds(code, openParenIndex + 1);
 
     if (argBounds) {
@@ -40,20 +36,37 @@ export function patchDynamicImports(
       if (isStringLiteral) {
         const content = originalArgument.slice(1, -1);
 
-        // Check if it looks like a relative/absolute path or URL.
-        // Matches: ./, ../, /, \, or anything starting with a protocol (http:)
+        // Check if it is an explicit Path or URL (./, ../, /, http:)
         const isExplicitPath = /^\.{0,2}[/\\]|^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(
           content,
         );
 
         if (!isExplicitPath) {
-          continue;
+          // It is a package (e.g. "multithreading").
+          // inside a Data URI, this will fail unless we resolve it to an absolute URL now.
+          try {
+            // standard import.meta.resolve only takes 1 argument.
+            // It resolves relative to THIS patcher file.
+            // In Browsers: Uses Import Map.
+            // In Node: Uses node_modules relative to this file.
+            const resolvedUrl = import.meta.resolve(content);
+
+            replacements.push({
+              start: start,
+              end: end,
+              text: JSON.stringify(resolvedUrl),
+            });
+            continue;
+          } catch (e) {
+            // If resolution fails (e.g. older env, or package missing),
+            // we leave it alone. It might fail at runtime, but we tried.
+          }
         }
       }
 
-      // Construct replacement
+      // This logic manually resolves relative paths (./foo) against the callerLocation.
+      // We do this manually because import.meta.resolve(specifier, parent) is not standard.
       const safeCallerLoc = JSON.stringify(normalizedCaller);
-
       const newArgument =
         `new URL(${originalArgument}, new URL(${safeCallerLoc}, import.meta.url).href).href`;
 
@@ -65,9 +78,8 @@ export function patchDynamicImports(
     }
   }
 
-  // Apply replacements in reverse order
+  // 4. Apply replacements
   replacements.sort((a, b) => b.start - a.start);
-
   let modifiedCode = code;
   for (const rep of replacements) {
     const before = modifiedCode.slice(0, rep.start);
