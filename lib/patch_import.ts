@@ -6,7 +6,7 @@ export function patchDynamicImports(
   code: string,
   callerLocation: string,
 ): string {
-  // 0. Normalize callerLocation to be a valid URL (file:// or http://).
+  // Normalize callerLocation to be a valid URL (file:// or http://).
   let normalizedCaller = callerLocation;
 
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalizedCaller)) {
@@ -33,6 +33,10 @@ export function patchDynamicImports(
 
       const isStringLiteral = /^["'`]/.test(originalArgument);
 
+      // Default assumption: We should apply the fallback patch (new URL wrap)
+      // unless we determine it's a package that should be resolved or skipped.
+      let shouldApplyFallback = true;
+
       if (isStringLiteral) {
         const content = originalArgument.slice(1, -1);
 
@@ -41,14 +45,15 @@ export function patchDynamicImports(
           content,
         );
 
+        // Handle packages (Bare Specifiers)
         if (!isExplicitPath) {
-          // It is a package (e.g. "multithreading").
-          // inside a Data URI, this will fail unless we resolve it to an absolute URL now.
+          // It is a bare specifier (e.g. "multithreading").
+          // We do NOT want to apply the fallback wrapper to these,
+          // because new URL("multithreading", ...) creates a broken file path.
+          shouldApplyFallback = false;
+
           try {
-            // standard import.meta.resolve only takes 1 argument.
-            // It resolves relative to THIS patcher file.
-            // In Browsers: Uses Import Map.
-            // In Node: Uses node_modules relative to this file.
+            // Try to resolve it to an absolute URL
             const resolvedUrl = import.meta.resolve(content);
 
             replacements.push({
@@ -56,29 +61,31 @@ export function patchDynamicImports(
               end: end,
               text: JSON.stringify(resolvedUrl),
             });
-            continue;
           } catch (e) {
-            // If resolution fails (e.g. older env, or package missing),
-            // we leave it alone. It might fail at runtime, but we tried.
+            // Resolution failed (package not found).
+            // We do nothing. We leave the code as `import("pkg")`.
+            // Crucially, we have set shouldApplyFallback = false,
+            // so it won't get mangled below.
           }
         }
       }
 
-      // This logic manually resolves relative paths (./foo) against the callerLocation.
-      // We do this manually because import.meta.resolve(specifier, parent) is not standard.
-      const safeCallerLoc = JSON.stringify(normalizedCaller);
-      const newArgument =
-        `new URL(${originalArgument}, new URL(${safeCallerLoc}, import.meta.url).href).href`;
+      // Handle relative paths and variables (fallback)
+      if (shouldApplyFallback) {
+        const safeCallerLoc = JSON.stringify(normalizedCaller);
+        const newArgument =
+          `new URL(${originalArgument}, new URL(${safeCallerLoc}, import.meta.url).href).href`;
 
-      replacements.push({
-        start: start,
-        end: end,
-        text: newArgument,
-      });
+        replacements.push({
+          start: start,
+          end: end,
+          text: newArgument,
+        });
+      }
     }
   }
 
-  // 4. Apply replacements
+  // Apply replacements
   replacements.sort((a, b) => b.start - a.start);
   let modifiedCode = code;
   for (const rep of replacements) {
@@ -90,23 +97,13 @@ export function patchDynamicImports(
   return modifiedCode;
 }
 
-/**
- * Helper: Scans forward from a specific index to find the bounds of the
- * ACTUAL code argument, ignoring surrounding whitespace and comments.
- */
-function findArgumentBounds(
-  code: string,
-  startIndex: number,
-): { start: number; end: number } | null {
+// Helper: Finds the bounds of the import() argument
+function findArgumentBounds(code: string, startIndex: number) {
   let index = startIndex;
   const len = code.length;
-
   let inString: "'" | '"' | "`" | null = null;
   let inComment: "//" | "/*" | null = null;
   let parenDepth = 0;
-
-  // We track the start and end of "Meaningful Code".
-  // Meaningful = anything that isn't whitespace or a comment.
   let argStart = -1;
   let argEnd = -1;
 
@@ -114,36 +111,30 @@ function findArgumentBounds(
     const char = code[index]!;
     const nextChar = code[index + 1];
 
-    // --- 1. HANDLE STRINGS ---
+    // Strings
     if (inString) {
       if (char === "\\" && index + 1 < len) {
-        index++; // Skip escaped char
-        // Escaped chars are meaningful, update end
+        index++;
         argEnd = index + 1;
         continue;
       }
-      if (char === inString) {
-        inString = null;
-      }
-      // Everything inside a string is meaningful
+      if (char === inString) inString = null;
       if (argStart === -1) argStart = index;
       argEnd = index + 1;
       continue;
     }
 
-    // --- 2. HANDLE COMMENTS ---
+    // Comments
     if (inComment) {
-      if (inComment === "//" && char === "\n") {
+      if (inComment === "//" && char === "\n") inComment = null;
+      else if (inComment === "/*" && char === "*" && nextChar === "/") {
         inComment = null;
-      } else if (inComment === "/*" && char === "*" && nextChar === "/") {
-        inComment = null;
-        index++; // Skip the /
+        index++;
       }
-      // Comments are NOT meaningful (we do not update argStart/argEnd)
       continue;
     }
 
-    // --- 3. DETECT START OF STRINGS ---
+    // Start Strings
     if (char === '"' || char === "'" || char === "`") {
       inString = char;
       if (argStart === -1) argStart = index;
@@ -151,7 +142,7 @@ function findArgumentBounds(
       continue;
     }
 
-    // --- 4. DETECT START OF COMMENTS ---
+    // Start Comments
     if (char === "/" && nextChar === "/") {
       inComment = "//";
       index++;
@@ -163,16 +154,14 @@ function findArgumentBounds(
       continue;
     }
 
-    // --- 5. HANDLE SYNTAX STRUCTURE ---
+    // Syntax
     if (char === "(") {
       parenDepth++;
-      // Parenthesis inside the expression are meaningful code
       if (argStart === -1) argStart = index;
       argEnd = index + 1;
     } else if (char === ")") {
       if (parenDepth === 0) {
-        // HIT THE END OF IMPORT
-        if (argStart === -1) return null; // Empty import()
+        if (argStart === -1) return null;
         return { start: argStart, end: argEnd };
       }
       parenDepth--;
@@ -180,22 +169,17 @@ function findArgumentBounds(
       argEnd = index + 1;
     } else if (char === ",") {
       if (parenDepth === 0) {
-        // HIT THE END OF FIRST ARGUMENT
-        if (argStart === -1) return null; // Empty?
+        if (argStart === -1) return null;
         return { start: argStart, end: argEnd };
       }
-      // Commas inside nested function calls are meaningful
       if (argStart === -1) argStart = index;
       argEnd = index + 1;
     } else {
-      // --- 6. GENERIC CHARACTERS ---
-      // If it is NOT whitespace, it is meaningful code.
       if (!/\s/.test(char)) {
         if (argStart === -1) argStart = index;
         argEnd = index + 1;
       }
     }
   }
-
   return null;
 }
