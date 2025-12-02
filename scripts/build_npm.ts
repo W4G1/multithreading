@@ -21,6 +21,7 @@ await build({
   compilerOptions: {
     // 2. Needed for worker types
     lib: ["ESNext", "DOM", "WebWorker"],
+    target: "Latest",
   },
   package: {
     name: "multithreading",
