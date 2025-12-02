@@ -4,7 +4,6 @@ import {
   parentPort,
   Worker as NodeWorker,
 } from "node:worker_threads";
-import { cpus } from "node:os";
 
 const isNode = typeof process !== "undefined" &&
   typeof process?.versions?.node === "string" &&
@@ -14,10 +13,6 @@ const isNode = typeof process !== "undefined" &&
 if (isNode) {
   globalThis.self = globalThis;
 
-  globalThis.navigator ??= globalThis.navigator ?? {};
-  globalThis.navigator.hardwareConcurrency ??= cpus().length;
-
-  // Force "ErrorEvent"
   globalThis.ErrorEvent = class ErrorEvent extends Event {
     public message: string;
     public filename: string;
@@ -91,12 +86,12 @@ if (isNode) {
   }
 
   if (!isMainThread && parentPort) {
-    // A. Polyfill postMessage
+    // Polyfill postMessage
     globalThis.postMessage = (message: any, transfer?: Transferable[]) => {
       parentPort.postMessage(message, transfer);
     };
 
-    // B. Polyfill onmessage
+    // Polyfill onmessage
     let currentHandler = globalThis.onmessage;
 
     parentPort.on("message", (data) => {
@@ -114,39 +109,5 @@ if (isNode) {
       configurable: true,
       enumerable: true,
     });
-
-    // C. Blob & URL Polyfill
-    class SyncBlob {
-      parts: any[];
-      type: string;
-      constructor(blobParts: any[], options?: BlobPropertyBag) {
-        this.parts = blobParts;
-        this.type = options?.type || "";
-      }
-    }
-
-    // Overwrite global Blob
-    globalThis.Blob = SyncBlob;
-
-    const originalCreateObjectURL = globalThis.URL.createObjectURL;
-
-    // Overwrite URL.createObjectURL
-    globalThis.URL.createObjectURL = (blob: any) => {
-      if (blob instanceof SyncBlob) {
-        const code = blob.parts.join("");
-        const b64 = Buffer.from(code).toString("base64");
-        return `data:${blob.type};base64,${b64}`;
-      }
-
-      if (originalCreateObjectURL) {
-        return originalCreateObjectURL(blob);
-      }
-
-      throw new Error(
-        "URL.createObjectURL polyfill: Argument is not a SyncBlob",
-      );
-    };
-
-    globalThis.URL.revokeObjectURL = () => {};
   }
 }

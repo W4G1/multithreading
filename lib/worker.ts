@@ -9,8 +9,6 @@ import "./sync/mutex.ts";
 import "./sync/condvar.ts";
 import "./sync/rwlock.ts";
 
-export type Fanthom = never;
-
 const functionRegistry = new Map<string, (...args: any[]) => any>();
 
 self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
@@ -22,12 +20,10 @@ self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
 
       let fn = functionRegistry.get(fnId);
       if (!fn) {
-        const blob = new Blob([code], {
-          type: "text/javascript",
-        });
-        const blobUrl = URL.createObjectURL(blob);
-        const mod = await import(blobUrl);
-        URL.revokeObjectURL(blobUrl);
+        const base64Code = btoa(code);
+        const dataUrl = `data:text/javascript;base64,${base64Code}`;
+
+        const mod = await import(dataUrl);
 
         fn = mod.default;
 

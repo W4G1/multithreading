@@ -1,3 +1,5 @@
+import "./polyfills/mod.ts";
+
 import { getCallerLocation } from "./caller_location.ts";
 import { patchDynamicImports } from "./patch_import.ts";
 import { WorkerPool } from "./pool.ts";
@@ -86,8 +88,6 @@ export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
         "export default " + fn.toString(),
         callerLocation.filePath,
       );
-
-      console.log(finalCode);
 
       const task: ThreadTask = {
         fnId,
