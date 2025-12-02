@@ -1,62 +1,59 @@
 /**
  * Parses source code and patches dynamic imports to resolve relative
  * to a specific callerLocation using import.meta.url.
- * * This uses a state-machine approach to correctly ignore parentheses
- * inside strings, templates, and comments.
  */
 export function patchDynamicImports(
   code: string,
   callerLocation: string,
 ): string {
-  // 0. Normalize callerLocation to be a valid URL.
-  // The Error "Invalid URL" happens because `new URL(path, base)` requires `base`
-  // to be a valid URL (e.g. file:///...), but raw paths (/home/...) are not.
+  // Normalize callerLocation to be a valid URL.
   let normalizedCaller = callerLocation;
 
-  // If it doesn't look like a URL (no protocol), assume it's a file path.
   if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalizedCaller)) {
-    // Windows path fix (C:\... -> /C:/...)
     normalizedCaller = normalizedCaller.replace(/\\/g, "/");
-
-    // Ensure it starts with a slash if it doesn't already (e.g. C:/...)
     if (!normalizedCaller.startsWith("/")) {
       normalizedCaller = "/" + normalizedCaller;
     }
-
-    // Prepend protocol
     normalizedCaller = "file://" + normalizedCaller;
   }
 
-  // 1. Find all occurrences of "import("
-  // We use a regex to find the start, then manually find the end to handle nesting/strings.
+  // Find all occurrences of "import("
   const importStartPattern = /\bimport\s*\(/g;
 
   const replacements: { start: number; end: number; text: string }[] = [];
   let match: RegExpExecArray | null;
 
-  // 2. Iterate through matches
+  // Iterate through matches
   while ((match = importStartPattern.exec(code)) !== null) {
     const importStartIndex = match.index;
-    // The match[0] contains "import(" or "import (", etc.
-    // The argument starts immediately after the opening parenthesis.
     const openParenIndex = importStartIndex + match[0].length - 1;
 
-    // 3. Extract the first argument safely
+    // Extract the first argument safely
     const argBounds = findArgumentBounds(code, openParenIndex + 1);
 
     if (argBounds) {
       const { start, end } = argBounds;
       const originalArgument = code.slice(start, end);
 
-      // 4. Construct replacement
-      // We JSON.stringify the NORMALIZED location.
-      // If normalizedCaller is "file:///home/...", the `new URL` constructor
-      // will accept it as a valid base, or ignore the second arg if the first is absolute.
+      const isStringLiteral = /^["'`]/.test(originalArgument);
+
+      if (isStringLiteral) {
+        const content = originalArgument.slice(1, -1);
+
+        // Check if it looks like a relative/absolute path or URL.
+        // Matches: ./, ../, /, \, or anything starting with a protocol (http:)
+        const isExplicitPath = /^\.{0,2}[/\\]|^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(
+          content,
+        );
+
+        if (!isExplicitPath) {
+          continue;
+        }
+      }
+
+      // Construct replacement
       const safeCallerLoc = JSON.stringify(normalizedCaller);
 
-      // We use a nested URL constructor structure:
-      // 1. Resolve safeCallerLoc against import.meta.url (handles if callerLoc is relative).
-      // 2. Resolve originalArgument against the result of 1.
       const newArgument =
         `new URL(${originalArgument}, new URL(${safeCallerLoc}, import.meta.url).href).href`;
 
@@ -68,7 +65,7 @@ export function patchDynamicImports(
     }
   }
 
-  // 5. Apply replacements in reverse order (to not mess up indices)
+  // Apply replacements in reverse order
   replacements.sort((a, b) => b.start - a.start);
 
   let modifiedCode = code;
