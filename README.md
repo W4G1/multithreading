@@ -91,46 +91,35 @@ The standard `SharedArrayBuffer` is powerful but difficult to use because it onl
 When you modify data within a `SharedJsonBuffer`, the library does not naively re-serialize the entire object tree into the buffer. Instead, it detects which parts of the memory structure have changed and updates only the specific byte ranges corresponding to those fields.
 
 ```typescript
-import { spawn, move, Mutex, SharedJsonBuffer } from "multithreading";
-
-interface GameState {
-  score: number;
-  players: string[];
-  level: { id: number; title: string };
-}
+import { move, Mutex, SharedJsonBuffer, spawn } from "./lib/lib.ts";
 
 const sharedState = new Mutex(new SharedJsonBuffer({
   score: 0,
-  players: [], 
+  players: ["Main Thread"],
   level: {
-    id: 1, 
-    itle: "Start"
-  } 
-}, 4096)); // initial size (e.g., 4KB)
+    id: 1,
+    title: "Start",
+  },
+}));
 
 await spawn(move(sharedState), async (lock) => {
   using guard = await lock.acquire();
-  
-  // 3. Access the data
-  // The buffer automatically deserializes the object from shared memory
-  const state = guard.value.get();
-  
+
+  const state = guard.value;
+
   console.log(`Current Score: ${state.score}`);
-  
-  // 4. Modify the data
+
+  // Modify the data
   state.score += 100;
   state.players.push("Worker1");
-  
-  // 5. Commit changes back to shared memory
-  // This serializes the object back into the SharedArrayBuffer
-  guard.value.set(state);
-  
+
+  // End of scope: Lock is automatically released here
 }).join();
 
 // Verify on main thread
-using guard = await mutex.acquire();
+using guard = await sharedState.acquire();
 
-console.log(guard.value.get()); // { score: 100, players: ["Worker1"], ... }
+console.log(guard.value); // { score: 100, players: ["Main Thread", "Worker1"], ... }
 ```
 
 -----
