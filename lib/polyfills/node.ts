@@ -3,8 +3,7 @@
 const isNode = "process" in globalThis &&
   typeof globalThis.process?.versions?.node === "string" &&
   !("Deno" in globalThis) &&
-  !("Bun" in globalThis) &&
-  !("navigator" in globalThis);
+  !("Bun" in globalThis);
 
 if (isNode) {
   const {
