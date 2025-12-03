@@ -80,6 +80,61 @@ await handle.join();
 
 -----
 
+## SharedJsonBuffer: Sharing Complex Objects
+
+The standard `SharedArrayBuffer` is powerful but difficult to use because it only supports binary data (integers and floats). Sharing complex application state (objects, arrays, strings) usually requires `postMessage`, which forces a full copy of the data, or full serialization (JSON.stringify), which is CPU intensive.
+
+`SharedJsonBuffer` is a special primitive in this library that solves this. It acts as a shared memory container that can hold any JSON-serializable structure. It handles the low-level byte serialization for you, allowing you to share "Global State" across workers protected by a Mutex.
+
+### Update Efficiency
+
+When you modify data within a `SharedJsonBuffer`, the library does not naively re-serialize the entire object tree into the buffer. Instead, it detects which parts of the memory structure have changed and updates only the specific byte ranges corresponding to those fields.
+
+```typescript
+import { spawn, move, Mutex, SharedJsonBuffer } from "multithreading";
+
+interface GameState {
+  score: number;
+  players: string[];
+  level: { id: number; title: string };
+}
+
+const sharedState = new Mutex(new SharedJsonBuffer({
+  score: 0,
+  players: [], 
+  level: {
+    id: 1, 
+    itle: "Start"
+  } 
+}, 4096)); // initial size (e.g., 4KB)
+
+await spawn(move(sharedState), async (lock) => {
+  using guard = await lock.acquire();
+  
+  // 3. Access the data
+  // The buffer automatically deserializes the object from shared memory
+  const state = guard.value.get();
+  
+  console.log(`Current Score: ${state.score}`);
+  
+  // 4. Modify the data
+  state.score += 100;
+  state.players.push("Worker1");
+  
+  // 5. Commit changes back to shared memory
+  // This serializes the object back into the SharedArrayBuffer
+  guard.value.set(state);
+  
+}).join();
+
+// Verify on main thread
+using guard = await mutex.acquire();
+
+console.log(guard.value.get()); // { score: 100, players: ["Worker1"], ... }
+```
+
+-----
+
 ## Synchronization Primitives
 
 When multiple threads access shared memory (via `SharedArrayBuffer`), race conditions occur. This library provides primitives to synchronize access safely.
@@ -92,7 +147,7 @@ A `Mutex` ensures that only one thread can access a specific piece of data at a 
 
 #### Option A: Automatic Management (Recommended)
 
-This library leverages the Explicit Resource Management proposal (`using` keyword). When you acquire a lock, it returns a guard. When that guard goes out of scope, the lock is automatically released.
+This library leverages the [Explicit Resource Management](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/using) proposal (`using` keyword). When you acquire a lock, it returns a guard. When that guard goes out of scope, the lock is automatically released.
 
 ```typescript
 import { spawn, move, Mutex, SharedArrayBuffer } from "multithreading";
@@ -213,15 +268,11 @@ spawn(async () => {
   // 1. Importing a relative file
   // This path is relative to 'main.ts' (the caller location)
   const utils = await import("./utils.ts");
-  console.log("Magic number from relative file:", utils.magicNumber);
-
   // 2. Importing an external library (e.g., from a URL or node_modules resolution)
-  try {
-      const _ = await import("lodash");
-      console.log("Random number via lodash:", _.default.random(1, 100));
-  } catch (e) {
-      console.log("Could not load external lib in this environment");
-  }
+  const _ = await import("lodash");
+
+  console.log("Magic number from relative file:", utils.magicNumber);
+  console.log("Random number via lodash:", _.default.random(1, 100));
   
   return utils.magicNumber;
 });
@@ -242,6 +293,7 @@ spawn(async () => {
 
   * **`move(...args)`**: Marks arguments for transfer (ownership move) rather than structured clone. Accepts a variable number of arguments which map to the arguments of the worker function.
   * **`drop(resource)`**: Explicitly disposes of a resource (calls `[Symbol.dispose]`). This is required for manual lock management in environments like Bun.
+  * **`SharedJsonBuffer`**: A class for storing JSON objects in shared memory.
 
 ### Synchronization
 
