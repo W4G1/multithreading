@@ -82,13 +82,7 @@ await handle.join();
 
 ## SharedJsonBuffer: Sharing Complex Objects
 
-The standard `SharedArrayBuffer` is powerful but difficult to use because it only supports binary data (integers and floats). Sharing complex application state (objects, arrays, strings) usually requires `postMessage`, which forces a full copy of the data, or full serialization (JSON.stringify), which is CPU intensive.
-
-`SharedJsonBuffer` is a special primitive in this library that solves this. It acts as a shared memory container that can hold any JSON-serializable structure. It handles the low-level byte serialization for you, allowing you to share "Global State" across workers protected by a Mutex.
-
-### Update Efficiency
-
-When you modify data within a `SharedJsonBuffer`, the library does not naively re-serialize the entire object tree into the buffer. Instead, it detects which parts of the memory structure have changed and updates only the specific byte ranges corresponding to those fields.
+`SharedJsonBuffer` enables Mutex-protected shared memory for JSON objects, eliminating the overhead of `postMessage` data copying. Unlike standard buffers, it handles serialization automatically. It supports partial updates, re-serializing only changed bytes rather than the entire object tree for high-performance state synchronization.
 
 ```typescript
 import { move, Mutex, SharedJsonBuffer, spawn } from "./lib/lib.ts";
