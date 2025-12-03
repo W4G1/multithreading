@@ -1,19 +1,21 @@
-/**
- * Applies a monkey patch for Atomics.waitAsync specifically for the Deno environment.
- * In Deno, the V8 message loop is drained at the start of event loop iterations,
- * meaning standard V8 wakeups might not trigger immediate processing of waitAsync.
- * This monkey patch injects a setInterval "tick" to ensure the event loop stays active
- * and wakes up to process the atomic notification.
- *
- * waitAsync, along with GC, WeakRef/FinalizationRegistry callbacks and WebAssembly async compilation, are things
- * that happen when the V8 message loop is drained. V8 usually expects the message loop to be more or less continuously
- * drained, so that the message loop is the event loop, but Deno instead drains the message loop at the beginning of every
- * event loop iteration. As such, V8 doesn't have any way to wake up Deno's event loop, and the waitAsync timeout will
- * only fire when the event loop is woken up in some other way:
- */
-import { setImmediate } from "node:timers";
+// @ts-nocheck This is a polyfill file
 
 if ("Deno" in globalThis) {
+  /**
+   * Applies a monkey patch for Atomics.waitAsync specifically for the Deno environment.
+   * In Deno, the V8 message loop is drained at the start of event loop iterations,
+   * meaning standard V8 wakeups might not trigger immediate processing of waitAsync.
+   * This monkey patch injects a setInterval "tick" to ensure the event loop stays active
+   * and wakes up to process the atomic notification.
+   *
+   * waitAsync, along with GC, WeakRef/FinalizationRegistry callbacks and WebAssembly async compilation, are things
+   * that happen when the V8 message loop is drained. V8 usually expects the message loop to be more or less continuously
+   * drained, so that the message loop is the event loop, but Deno instead drains the message loop at the beginning of every
+   * event loop iteration. As such, V8 doesn't have any way to wake up Deno's event loop, and the waitAsync timeout will
+   * only fire when the event loop is woken up in some other way:
+   */
+  const { setImmediate } = await import("node:timers");
+
   const originalWaitAsync = Atomics.waitAsync;
 
   // @ts-ignore: Overwriting native function signature

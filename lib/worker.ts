@@ -1,7 +1,7 @@
-import { deserialize, serialize, type WorkerTaskPayload } from "./shared.ts";
-
 // Applies necessary polyfills for certain runtimes
 import "./polyfills/mod.ts";
+
+import { deserialize, serialize, type WorkerTaskPayload } from "./shared.ts";
 
 // Import for side-effects: This triggers the static { register(this) } blocks
 import "./json_buffer.ts";
@@ -44,6 +44,9 @@ self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
       );
     } catch (err) {
       console.error(err);
+      console.log("[START WORKER CODE DUMP]");
+      console.log(code);
+      console.log("[END WORKER CODE DUMP]");
 
       const error = err instanceof Error ? err : new Error(String(err));
 
@@ -57,6 +60,6 @@ self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
   }
 };
 
-self.onerror = (e: ErrorEvent) => {
+self.onerror = (e) => {
   console.error(e.message, e);
 };

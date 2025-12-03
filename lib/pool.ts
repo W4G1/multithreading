@@ -20,7 +20,7 @@ export class WorkerPool {
 
   constructor(maxThreads?: number) {
     this.maxThreads = maxThreads ?? navigator.hardwareConcurrency ?? 4;
-    const extension = import.meta.url.split(".").pop();
+    const extension = import.meta.url.split(".").at(-1)?.split("?").at(0)!;
     this.workerUrl = new URL("./worker." + extension, import.meta.url).href;
   }
 

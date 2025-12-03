@@ -9,7 +9,7 @@ export function patchDynamicImports(
   // Normalize callerLocation to be a valid URL (file:// or http://).
   let normalizedCaller = callerLocation;
 
-  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalizedCaller)) {
+  if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalizedCaller)) {
     // Windows fix
     normalizedCaller = normalizedCaller.replace(/\\/g, "/");
     if (!normalizedCaller.startsWith("/")) {
@@ -47,9 +47,6 @@ export function patchDynamicImports(
 
         // Handle packages (Bare Specifiers)
         if (!isExplicitPath) {
-          // It is a bare specifier (e.g. "multithreading").
-          // We do NOT want to apply the fallback wrapper to these,
-          // because new URL("multithreading", ...) creates a broken file path.
           shouldApplyFallback = false;
 
           try {
@@ -63,18 +60,29 @@ export function patchDynamicImports(
             });
           } catch (e) {
             // Resolution failed (package not found).
-            // We do nothing. We leave the code as `import("pkg")`.
-            // Crucially, we have set shouldApplyFallback = false,
-            // so it won't get mangled below.
           }
         }
       }
 
       // Handle relative paths and variables (fallback)
       if (shouldApplyFallback) {
-        const safeCallerLoc = JSON.stringify(normalizedCaller);
-        const newArgument =
-          `new URL(${originalArgument}, new URL(${safeCallerLoc}, import.meta.url).href).href`;
+        // Standard base: relative to the file provided by caller
+        let base = `new URL(${
+          JSON.stringify(normalizedCaller)
+        }, import.meta.url).href`;
+
+        if (isStringLiteral) {
+          const content = originalArgument.slice(1, -1);
+          // If the path is Root-Relative (starts with /),
+          // we cannot rely on import.meta.url if it is a Data URI (worker).
+          // We must use location.origin in the browser, or import.meta.url in Node.
+          if (content.startsWith("/") || content.startsWith("\\")) {
+            base =
+              `(typeof location !== "undefined" ? location.origin : import.meta.url)`;
+          }
+        }
+
+        const newArgument = `new URL(${originalArgument}, ${base}).href`;
 
         replacements.push({
           start: start,

@@ -1,16 +1,18 @@
 // @ts-nocheck This is a polyfill file
-import {
-  isMainThread,
-  parentPort,
-  Worker as NodeWorker,
-} from "node:worker_threads";
 
-const isNode = typeof globalThis.process !== "undefined" &&
+const isNode = "process" in globalThis &&
   typeof globalThis.process?.versions?.node === "string" &&
   !("Deno" in globalThis) &&
-  !("Bun" in globalThis);
+  !("Bun" in globalThis) &&
+  !("navigator" in globalThis);
 
 if (isNode) {
+  const {
+    isMainThread,
+    parentPort,
+    Worker: NodeWorker,
+  } = await import("node:worker_threads");
+
   globalThis.self = globalThis;
 
   globalThis.ErrorEvent = class ErrorEvent extends Event {
