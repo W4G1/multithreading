@@ -1,9 +1,8 @@
 import ts from "typescript";
-import { ensureDir } from "https://deno.land/std@0.224.0/fs/ensure_dir.ts";
-import * as path from "https://deno.land/std@0.224.0/path/mod.ts";
-import { existsSync } from "https://deno.land/std@0.224.0/fs/exists.ts";
+import { ensureDir } from "@std/fs";
+import * as path from "@std/path";
 
-const OUT_DIR = "./npm";
+const OUT_DIR = "./dist";
 const VERSION = Deno.args[0] || "0.0.1";
 
 console.log(`[Build] Cleaning ${OUT_DIR}...`);

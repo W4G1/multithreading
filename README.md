@@ -1,29 +1,17 @@
 <div align="center">
 
-[![Multithreading Banner](https://github.com/W4G1/multithreading/assets/38042257/ead29359-37c3-4fd2-819b-349ddeec5524)](https://multithreading.io)
-
 [![License](https://img.shields.io/github/license/W4G1/multithreading)](https://github.com/W4G1/multithreading/blob/main/LICENSE.md)
 [![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)](https://www.npmjs.com/package/multithreading)
 [![NPM version](https://img.shields.io/npm/v/multithreading)](https://www.npmjs.com/package/multithreading?activeTab=versions)
 [![GitHub Repo stars](https://img.shields.io/github/stars/W4G1/multithreading?logo=github&label=Star&labelColor=rgb(26%2C%2030%2C%2035)&color=rgb(13%2C%2017%2C%2023))](https://github.com/W4G1/multithreading)
-[![Node.js CI](https://github.com/W4G1/multithreading/actions/workflows/node.js.yml/badge.svg)](https://github.com/W4G1/multithreading/actions/workflows/node.js.yml)
 
 </div>
 
-# multithreading
+# Multithreading
 
-Multithreading is a tiny runtime that allows you to execute JavaScript functions on separate threads. It is designed to be as simple and fast as possible, and to be used in a similar way to regular functions.
+**Multithreading** is a TypeScript library that brings robust, Rust-inspired concurrency primitives to the JavaScript ecosystem. It provides a thread-pool architecture, strict memory safety semantics, and synchronization primitives like Mutexes, Read-Write Locks, and Condition Variables.
 
-With a minified size of only 4.5kb, it has first class support for [Node.js](https://nodejs.org/), [Deno](https://deno.com/) and the [browser](https://caniuse.com/?search=webworkers). It can also be used with any framework or library such as [React](https://react.dev/), [Vue](https://vuejs.org/) or [Svelte](https://svelte.dev/).
-
-Depending on the environment, it uses [Worker Threads](https://nodejs.org/api/worker_threads.html) or [Web Workers](https://developer.mozilla.org/en-US/docs/Web/API/Worker). In addition to [ES6 generators](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/function*) to make multithreading as simple as possible.
-
-### The State of Multithreading in JavaScript
-
-JavaScript's single-threaded nature means that tasks are executed one after the other, leading to potential performance bottlenecks and underutilized CPU resources. While [Web Workers](https://developer.mozilla.org/en-US/docs/Web/API/Worker) and [Worker Threads](https://nodejs.org/api/worker_threads.html) offer a way to offload tasks to separate threads, managing the state and communication between these threads is often complex and error-prone.
-
-This project aims to solve these challenges by providing an intuitive Web Worker abstraction that mirrors the behavior of regular JavaScript functions.
-This way it feels like you're executing a regular function, but in reality, it's running in parallel on a separate threads.
+This library is designed to abstract away the complexity of managing `WebWorkers`, serialization, and `SharedArrayBuffer` complexities, allowing developers to write multi-threaded code that looks and feels like standard asynchronous JavaScript.
 
 ## Installation
 
@@ -31,121 +19,252 @@ This way it feels like you're executing a regular function, but in reality, it's
 npm install multithreading
 ```
 
-## Usage
+## Core Concepts
 
-#### Basic example
+JavaScript is traditionally single-threaded. To achieve true parallelism, this library uses Web Workers. However, unlike standard Workers, this library offers:
 
-```js
-import { threaded } from "multithreading";
+1.  **Managed Worker Pool**: Automatically manages a pool of threads based on hardware concurrency.
+2.  **Shared Memory Primitives**: Tools to safely share state between threads without race conditions.
+3.  **Scoped Imports**: Support for importing external modules and relative files directly within worker tasks.
+4.  **Move Semantics**: Explicit data ownership transfer to prevent cloning overhead.
 
-const add = threaded(function* (a, b) {
-  return a + b;
+## Quick Start
+
+The entry point for most operations is the `spawn` function. This submits a task to the thread pool and returns a handle to await the result.
+
+```typescript
+import { spawn } from "multithreading";
+
+// Spawn a task on a background thread
+const handle = spawn(() => {
+  // This code runs in a separate worker
+  const result = Math.random()
+  return result;
 });
 
-console.log(await add(5, 10)); // 15
-```
-The `add` function is executed on a separate thread, and the result is returned to the main thread when the function is done executing. Consecutive invocations will be automatically executed in parallel on separate threads.
+// Wait for the result
+const result = await handle.join();
 
-#### Example with shared state
-
-```js
-import { threaded, $claim, $unclaim } from "multithreading";
-
-const user = {
-  name: "john",
-  balance: 0,
-};
-
-const add = threaded(async function* (amount) {
-  yield user; // Add user to dependencies
-
-  await $claim(user); // Wait for write lock
-
-  user.balance += amount;
-
-  $unclaim(user); // Release write lock
-});
-
-await Promise.all([
-  add(5),
-  add(10),
-]);
-
-console.log(user.balance); // 15
-```
-This example shows how to use a shared state across multiple threads. It introduces the concepts of claiming and unclaiming write access using `$claim` and `$unclaim`. This is to ensure that only one thread can write to a shared state at a time.
-
-> Always `$unclaim()` a shared state after use, otherwise the write lock will never be released and other threads that want to write to this state will be blocked indefinitely.
-
-The `yield` statement is used to specify external dependencies, and must be defined at the top of the function.
-
-#### Example with external functions
-
-```js
-import { threaded, $claim, $unclaim } from "multithreading";
-
-// Some external function
-function add (a, b) {
-  return a + b;
+if (result.ok) {
+  console.log("Result:", result.value); // 0.3378467071314606
+} else {
+  console.error("Worker error:", result.error);
 }
+```
 
-const user = {
-  name: "john",
-  balance: 0,
-};
+-----
 
-const addBalance = threaded(async function* (amount) {
-  yield user;
-  yield add; // Add external function to dependencies
+## Passing Data: Move Semantics
 
-  await $claim(user);
+By default, passing large objects to a worker involves "structured cloning" (copying), which can be slow. If you want to transfer ownership of an object (like an `ArrayBuffer`) without copying, use the `move` function.
 
-  user.balance = add(user.balance, amount);
+The `move` function accepts variadic arguments. These arguments are then passed directly to the worker function in the order they were provided.
 
-  $unclaim(user);
+```typescript
+import { spawn, move } from "multithreading";
+
+const largeData = new Uint8Array(1024 * 1024 * 10); // 10MB
+const metaData = { id: 1 };
+
+// 'move' signals that 'largeData' should be transferred, not copied.
+// We pass arguments as a comma-separated list.
+const handle = spawn(move(largeData, metaData), (data, meta) => {
+  // 'data' is now available here with zero-copy overhead.
+  // 'meta' is passed as the second argument.
+  console.log("Processing ID:", meta.id);
+  return data.byteLength;
 });
 
-
-await Promise.all([
-  addBalance(5),
-  addBalance(10),
-]);
-
-console.log(user.balance); // 15
-```
-In this example, the `add` function is used within the multithreaded `addBalance` function. The `yield` statement is used to declare external dependencies. You can think of it as a way to import external data, functions or even packages.
-
-As with previous examples, the shared state is managed using `$claim` and `$unclaim` to guarantee proper synchronization and prevent data conflicts.
-
-> External functions like `add` cannot have external dependencies themselves. All variables and functions used by an external function must be declared within the function itself.
-
-### Using imports from external packages
-
-When using external modules, you can dynamically import them by using `yield "some-package"`. This is useful when you want to use other packages within a threaded function.
-
-```js
-import { threaded } from "multithreading";
-
-const getId = threaded(function* () {
-  /**
-   * @type {import("uuid")}
-   */
-  const { v4 } = yield "uuid"; // Import other package
-
-  return v4();
-}
-
-console.log(await getId()); // 1a107623-3052-4f61-aca9-9d9388fb2d81
+await handle.join();
 ```
 
-You can also import external modules in a variety of other ways:
-```js
-const { v4 } = yield "npm:uuid"; // Using npm specifier (available in Deno)
-const { v4 } = yield "https://esm.sh/uuid"; // From CDN url (available in browser and Deno)
+-----
+
+## Synchronization Primitives
+
+When multiple threads access shared memory (via `SharedArrayBuffer`), race conditions occur. This library provides primitives to synchronize access safely.
+
+**Best Practice:** It is highly recommended to use the asynchronous methods (e.g., `acquire`, `read`, `write`, `wait`) rather than their synchronous counterparts. Synchronous blocking halts the entire Worker thread, potentially pausing other tasks sharing that worker.
+
+### 1\. Mutex (Mutual Exclusion)
+
+A `Mutex` ensures that only one thread can access a specific piece of data at a time.
+
+#### Option A: Automatic Management (Recommended)
+
+This library leverages the Explicit Resource Management proposal (`using` keyword). When you acquire a lock, it returns a guard. When that guard goes out of scope, the lock is automatically released.
+
+```typescript
+import { spawn, move, Mutex, SharedArrayBuffer } from "multithreading";
+
+const buffer = new SharedArrayBuffer(4);
+const counterMutex = new Mutex(new Int32Array(buffer));
+
+spawn(move(counterMutex), async (mutex) => {
+  // 'using' automatically calls dispose() at the end of the block
+  // awaiting acquire() ensures we don't block the thread while waiting
+  using guard = await mutex.acquire();
+  
+  // Critical Section
+  guard.value[0]++;
+  
+  // End of scope: Lock is automatically released here
+});
 ```
 
-## Enhanced Error Handling
-Errors inside threads are automatically injected with a pretty stack trace.
-This makes it easier to identify which line of your function caused the error, and in which thread the error occured.
+#### Option B: Manual Management (Bun / Standard JS)
 
-![Example of an enhanced stack trace](https://github.com/W4G1/multithreading/assets/38042257/4c5b3352-ad19-4270-86e4-dad6fc6e0fe6)
+If you are using **Bun** (which currently has transpilation issues with `using` logic in some versions) or prefer standard JavaScript syntax, you must manually release the lock using `drop()`. Always use a `try...finally` block to ensure the lock is released even if an error occurs.
+
+```typescript
+import { spawn, move, Mutex, drop, SharedArrayBuffer } from "multithreading";
+
+const buffer = new SharedArrayBuffer(4);
+const counterMutex = new Mutex(new Int32Array(buffer));
+
+spawn(move(counterMutex), async (mutex) => {
+  // 1. Acquire the lock manually
+  const guard = await mutex.acquire();
+
+  try {
+    // 2. Critical Section
+    guard.value[0]++;
+  } finally {
+    // 3. Explicitly release the lock
+    drop(guard);
+  }
+});
+```
+
+### 2\. RwLock (Read-Write Lock)
+
+A `RwLock` is optimized for scenarios where data is read often but written rarely. It allows **multiple** simultaneous readers but only **one** writer.
+
+```typescript
+import { spawn, move, RwLock, SharedArrayBuffer } from "multithreading";
+
+const lock = new RwLock(new Int32Array(new SharedArrayBuffer(4)));
+
+// Spawning a Writer
+spawn(move(lock), async (l) => {
+  // Blocks until all readers are finished (asynchronously)
+  using guard = await l.write(); 
+  guard.value[0] = 42;
+});
+
+// Spawning Readers
+spawn(move(lock), async (l) => {
+  // Multiple threads can hold this lock simultaneously
+  using guard = await l.read(); 
+  console.log(guard.value[0]);
+});
+```
+
+### 3\. Condvar (Condition Variable)
+
+A `Condvar` allows threads to wait for a specific condition to become true. It saves CPU resources by putting the task to sleep until it is notified, rather than constantly checking a value.
+
+```typescript
+import { spawn, move, Mutex, Condvar, SharedArrayBuffer } from "multithreading";
+
+const mutex = new Mutex(new Int32Array(new SharedArrayBuffer(4)));
+const cv = new Condvar();
+
+spawn(move(mutex, cv), async (lock, cond) => {
+  using guard = await lock.acquire();
+  
+  // Wait until value is not 0
+  while (guard.value[0] === 0) {
+    // wait() unlocks the mutex, waits for notification, then re-locks.
+    await cond.wait(guard);
+  }
+  
+  console.log("Received signal, value is:", guard.value[0]);
+});
+```
+
+-----
+
+## Importing Modules in Workers
+
+One of the most difficult aspects of Web Workers is handling imports. This library handles this automatically, enabling you to use dynamic `await import()` calls inside your spawned functions.
+
+You can import:
+
+1.  **External Libraries:** Packages from npm/CDN (depending on environment).
+2.  **Relative Files:** Files relative to the file calling `spawn`.
+
+**Note:** The function passed to `spawn` must be self-contained or explicitly import what it needs. It cannot access variables from the outer scope (closures) unless they are passed via `move()`.
+
+### Example: Importing Relative Files and External Libraries
+
+Assume you have a file structure:
+
+  - `main.ts`
+  - `utils.ts` (contains `export const magicNumber = 42;`)
+
+<!-- end list -->
+
+```typescript
+// main.ts
+import { spawn } from "multithreading";
+
+spawn(async () => {
+  // 1. Importing a relative file
+  // This path is relative to 'main.ts' (the caller location)
+  const utils = await import("./utils.ts");
+  console.log("Magic number from relative file:", utils.magicNumber);
+
+  // 2. Importing an external library (e.g., from a URL or node_modules resolution)
+  try {
+      const _ = await import("lodash");
+      console.log("Random number via lodash:", _.default.random(1, 100));
+  } catch (e) {
+      console.log("Could not load external lib in this environment");
+  }
+  
+  return utils.magicNumber;
+});
+```
+
+-----
+
+## API Reference
+
+### Runtime
+
+  * **`spawn(fn)`**: Runs a function in a worker.
+  * **`spawn(move(arg1, arg2, ...), fn)`**: Runs a function in a worker with specific arguments transferred or copied.
+  * **`initRuntime(config)`**: Initializes the thread pool (optional, lazy loaded by default).
+  * **`shutdown()`**: Terminates all workers in the pool.
+
+### Memory Management
+
+  * **`move(...args)`**: Marks arguments for transfer (ownership move) rather than structured clone. Accepts a variable number of arguments which map to the arguments of the worker function.
+  * **`drop(resource)`**: Explicitly disposes of a resource (calls `[Symbol.dispose]`). This is required for manual lock management in environments like Bun.
+
+### Synchronization
+
+  * **`Mutex<T>`**:
+      * `acquire()`: Async lock (Recommended). Returns `Promise<MutexGuard>`.
+      * `tryLock()`: Non-blocking attempt. Returns boolean.
+      * `acquireSync()`: Blocking lock (Halts Worker). Returns `MutexGuard`.
+  * **`RwLock<T>`**:
+      * `read()`: Async shared read access (Recommended).
+      * `write()`: Async exclusive write access (Recommended).
+      * `readSync()` / `writeSync()`: Synchronous/Blocking variants (Halts Worker).
+  * **`Condvar`**:
+      * `wait(guard)`: Async wait (Recommended). Yields execution.
+      * `notifyOne()`: Wake one waiting thread.
+      * `notifyAll()`: Wake all waiting threads.
+      * `waitSync(guard)`: Blocking wait (Halts Worker).
+
+-----
+
+## Technical Implementation Details
+
+For advanced users interested in the internal mechanics:
+
+  * **Serialization Protocol**: The library uses a custom "Envelope" protocol (`PayloadType.RAW` vs `PayloadType.LIB`). This allows complex objects like `Mutex` handles to be serialized, sent to a worker, and rehydrated into a functional object connected to the same `SharedArrayBuffer` on the other side.
+  * **Atomics**: Synchronization is built on `Int32Array` backed by `SharedArrayBuffer` using `Atomics.wait` and `Atomics.notify`.
+  * **Import Patching**: The `spawn` function analyzes the stack trace to determine the caller's file path. It then regex-patches `import()` statements within the worker code string to ensure relative paths resolve correctly against the caller's location, rather than the worker's location.
