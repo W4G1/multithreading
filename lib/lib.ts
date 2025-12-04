@@ -5,9 +5,7 @@ import { patchDynamicImports } from "./patch_import.ts";
 import { WorkerPool } from "./pool.ts";
 import type { JoinHandle, Result, ThreadTask } from "./types.ts";
 
-export { Mutex, type MutexGuard } from "./sync/mutex.ts";
-export { Condvar } from "./sync/condvar.ts";
-export { RwLock } from "./sync/rwlock.ts";
+export * from "./sync/mod.ts";
 export { SharedJsonBuffer } from "./json_buffer.ts";
 
 let globalPool: WorkerPool | null = null;

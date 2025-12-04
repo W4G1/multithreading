@@ -7,7 +7,7 @@
 
 </div>
 
-# Multithreading
+# Multithreading.js
 
 **Multithreading** is a TypeScript library that brings robust, Rust-inspired concurrency primitives to the JavaScript ecosystem. It provides a thread-pool architecture, strict memory safety semantics, and synchronization primitives like Mutexes, Read-Write Locks, and Condition Variables.
 
@@ -38,7 +38,7 @@ import { spawn } from "multithreading";
 // Spawn a task on a background thread
 const handle = spawn(() => {
   // This code runs in a separate worker
-  const result = Math.random()
+  const result = Math.random();
   return result;
 });
 
@@ -54,11 +54,18 @@ if (result.ok) {
 
 -----
 
-## Passing Data: Move Semantics
+## Passing Data: The `move()` Function
 
-By default, passing large objects to a worker involves "structured cloning" (copying), which can be slow. If you want to transfer ownership of an object (like an `ArrayBuffer`) without copying, use the `move` function.
+Because Web Workers run in a completely isolated context, functions passed to `spawn` cannot capture variables from their outer scope (closures). If you attempt to use a variable inside the worker that was defined outside of it, the code will fail.
 
-The `move` function accepts variadic arguments. These arguments are then passed directly to the worker function in the order they were provided.
+To get data from your main thread into the worker, you have to use the `move()` function.
+
+The `move` function accepts variadic arguments. These arguments are passed to the worker function in the order they were provided. Despite the name, `move` handles data in two ways:
+
+1.  **Transferable Objects (e.g., `ArrayBuffer`, `Uint32Array`):** These are "moved" (zero-copy). Ownership transfers to the worker, and the original becomes unusable in the main thread.
+2.  **Non-Transferable Objects (e.g., JSON, numbers, strings):** These are cloned via structured cloning. They remain usable in the main thread.
+
+<!-- end list -->
 
 ```typescript
 import { spawn, move } from "multithreading";
@@ -66,11 +73,10 @@ import { spawn, move } from "multithreading";
 const largeData = new Uint8Array(1024 * 1024 * 10); // 10MB
 const metaData = { id: 1 };
 
-// 'move' signals that 'largeData' should be transferred, not copied.
 // We pass arguments as a comma-separated list.
+// 'largeData' is MOVED (zero-copy) because it is transferable.
+// 'metaData' is CLONED because it is a standard object.
 const handle = spawn(move(largeData, metaData), (data, meta) => {
-  // 'data' is now available here with zero-copy overhead.
-  // 'meta' is passed as the second argument.
   console.log("Processing ID:", meta.id);
   return data.byteLength;
 });
@@ -155,12 +161,15 @@ spawn(move(counterMutex), async (mutex) => {
 If you are using **Bun** (which currently has transpilation issues with `using` logic in some versions) or prefer standard JavaScript syntax, you must manually release the lock using `drop()`. Always use a `try...finally` block to ensure the lock is released even if an error occurs.
 
 ```typescript
-import { spawn, move, Mutex, drop, SharedArrayBuffer } from "multithreading";
+import { spawn, move, Mutex, SharedArrayBuffer } from "multithreading";
 
 const buffer = new SharedArrayBuffer(4);
 const counterMutex = new Mutex(new Int32Array(buffer));
 
 spawn(move(counterMutex), async (mutex) => {
+  // Note that we have to import drop here, otherwise it wouldn't be available
+  const { drop } = await import("multithreading");
+
   // 1. Acquire the lock manually
   const guard = await mutex.acquire();
 
@@ -198,7 +207,52 @@ spawn(move(lock), async (l) => {
 });
 ```
 
-### 3\. Condvar (Condition Variable)
+### 3\. Semaphore
+
+A `Semaphore` limits the number of threads that can access a resource simultaneously. Unlike a Mutex (which allows exactly 1 owner), a Semaphore allows `N` owners. This is essential for rate limiting, managing connection pools, or bounding concurrency.
+
+```typescript
+import { spawn, move, Semaphore } from "multithreading";
+
+// Initialize with 3 permits (allowing 3 concurrent tasks)
+const semaphore = new Semaphore(3);
+
+for (let i = 0; i < 10; i++) {
+  spawn(move(semaphore), async (sem) => {
+    console.log("Waiting for slot...");
+    
+    // Will wait (async) if 3 threads are already working
+    using _ = await sem.acquire(); 
+    
+    console.log("Acquired slot! Working...");
+
+    await new Promise(r => setTimeout(r, 1000));
+    
+    // Guard is disposed automatically, releasing the permit for the next thread
+  });
+}
+```
+
+#### Manual Release
+
+Like the Mutex, if you cannot use the `using` keyword, you can manually manage the lifecycle.
+
+```typescript
+spawn(move(semaphore), async (sem) => {
+  const { drop } = await import("multithreading");
+  // Acquire 2 permits at once
+  const guard = await sem.acquire(2);
+  
+  try {
+    // Critical Section
+  } finally {
+    // Release the 2 permits
+    drop(guard);
+  }
+});
+```
+
+### 4\. Condvar (Condition Variable)
 
 A `Condvar` allows threads to wait for a specific condition to become true. It saves CPU resources by putting the task to sleep until it is notified, rather than constantly checking a value.
 
@@ -287,7 +341,11 @@ spawn(async () => {
   * **`RwLock<T>`**:
       * `read()`: Async shared read access (Recommended).
       * `write()`: Async exclusive write access (Recommended).
-      * `readSync()` / `writeSync()`: Synchronous/Blocking variants (Halts Worker).
+      * `readSync()` / `writeSync()`: Synchronous/Blocking variants.
+  * **`Semaphore`**:
+      * `acquire(amount?)`: Async wait for `n` permits. Returns `SemaphoreGuard`.
+      * `tryAcquire(amount?)`: Non-blocking. Returns `SemaphoreGuard` or `null`.
+      * `acquireSync(amount?)`: Blocking wait. Returns `SemaphoreGuard`.
   * **`Condvar`**:
       * `wait(guard)`: Async wait (Recommended). Yields execution.
       * `notifyOne()`: Wake one waiting thread.
