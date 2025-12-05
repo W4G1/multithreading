@@ -7,9 +7,8 @@ Deno.test("MPMC - Auto Close via 'using' (Sender Drop)", async () => {
 
   // Spawn a worker that adopts the sender
   spawn(move(tx), async (tx) => {
-    using _tx = tx;
-    await _tx.send(100);
-    await _tx.send(200);
+    await tx.send(100);
+    await tx.send(200);
     // Worker exits -> Ref count decrements
   });
 

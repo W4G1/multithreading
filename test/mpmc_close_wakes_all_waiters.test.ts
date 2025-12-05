@@ -7,14 +7,14 @@ Deno.test("MPMC - Close Wakes All Waiters", async () => {
   const [tx, rx] = channel<number>(10);
 
   const waiters = [1, 2, 3].map(() => {
-    const myRx = rx.clone();
-    return spawn(move(myRx), async (rx) => {
+    return spawn(move(rx.clone()), async (rx) => {
       const res = await rx.recv();
       return res.ok ? "data" : "closed";
     });
   });
 
   await new Promise((r) => setTimeout(r, 50));
+
   tx.close();
 
   const results = await Promise.all(waiters.map((w) => w.join()));

@@ -24,6 +24,14 @@ Deno.test("MPMC - Complex Object Serialization", async () => {
   const res = await rx.recv();
   assert(res.ok);
 
+  const result = await tx.send({
+    id: 1,
+    meta: { tags: ["a", "b"] },
+    buffer: [1, 2, 3],
+  });
+
+  assert(!result.ok); // Should error because tx is moved
+
   const val = res.value;
 
   assertEquals(val.id, 1);

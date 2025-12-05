@@ -53,7 +53,7 @@ export function move<Args extends any[]>(...args: Args): MovedData<Args> {
 
       if (isRawSAB || isViewSAB || isLibrarySAB) {
         console.warn(
-          "Warning: You are passing a SharedArrayBuffer (or view) to a worker without locking. Please wrap this data in a Mutex() or RwLock() to prevent race conditions.",
+          "Warning: You are passing a SharedArrayBuffer to a worker without locking. Please wrap this data in a Mutex() or RwLock() to prevent race conditions.",
         );
       }
     }

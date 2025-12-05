@@ -14,7 +14,8 @@ Deno.test("MPMC - Close Wakes Blocked Senders", async () => {
   });
 
   await new Promise((r) => setTimeout(r, 50));
-  tx1.close(); // Close via the handle we kept
+
+  tx1.close();
 
   const res = await sender2.join();
   assert(res.ok);

@@ -327,6 +327,28 @@ export class Receiver<T> implements Serializable, Disposable {
     }
   }
 
+  async *[Symbol.asyncIterator](): AsyncGenerator<T, void, void> {
+    while (true) {
+      const result = await this.recv();
+
+      if (result.ok) {
+        yield result.value;
+      } else {
+        const msg = result.error.message;
+
+        // Graceful exit conditions:
+        // 1. "Channel closed": Sender called close()
+        // 2. "Receiver disposed": This handle was disposed explicitly
+        if (msg === "Channel closed" || msg === "Receiver disposed") {
+          return;
+        }
+
+        // Throw on unexpected state corruption (e.g. "Spurious wakeup")
+        throw result.error;
+      }
+    }
+  }
+
   /**
    * Dispose Receiver.
    * Decrements ref count. If 0, we treat the channel as closed.

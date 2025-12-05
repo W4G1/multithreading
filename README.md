@@ -158,7 +158,7 @@ spawn(move(counterMutex), async (mutex) => {
 
 #### Option B: Manual Management (Bun / Standard JS)
 
-If you are using **Bun** (which currently has transpilation issues with `using` logic in some versions) or prefer standard JavaScript syntax, you must manually release the lock using `drop()`. Always use a `try...finally` block to ensure the lock is released even if an error occurs.
+If you are using **Bun** (which doesn't natively supports `using` but uses a transpiler which is incompatible with this library) or prefer standard JavaScript syntax, you must manually release the lock using `drop()`. Always use a `try...finally` block to ensure the lock is released even if an error occurs.
 
 ```typescript
 import { spawn, move, Mutex, SharedArrayBuffer } from "multithreading";
@@ -306,24 +306,14 @@ spawn(move(tx), async (sender) => {
 });
 
 // Consumer Thread
-spawn(move(rx), async (receiver) => {
-  while (true) {
-    const res = await receiver.recv();
-    
-    // Stop if the channel is closed (all senders finished)
-    if (!res.ok) break; 
-    
+spawn(move(rx.clone()), async (rx) => {
+  for await (const value of rx) {
     console.log(res.value); // { hello: "world" }
   }
 });
 
-// We can also consume on the main thread
-while (true) {
-  const res = await receiver.recv();
-  
-  // Stop if the channel is closed (all senders finished)
-  if (!res.ok) break; 
-  
+// Because we cloned rx, we can also receive on the main thread 
+for await (const value of rx) {
   console.log(res.value); // { hello: "world" }
 }
 ```
@@ -382,6 +372,20 @@ spawn(async () => {
   * **`move(...args)`**: Marks arguments for transfer (ownership move) rather than structured clone. Accepts a variable number of arguments which map to the arguments of the worker function.
   * **`drop(resource)`**: Explicitly disposes of a resource (calls `[Symbol.dispose]`). This is required for manual lock management in environments like Bun.
   * **`SharedJsonBuffer`**: A class for storing JSON objects in shared memory.
+
+### Channels (MPMC)
+
+  * **`channel<T>(capacity)`**: Creates a new channel. Returns `[Sender<T>, Receiver<T>]`.
+  * **`Sender<T>`**:
+      * `send(value)`: Async. Returns `Promise<Result<void, Error>>`.
+      * `sendSync(value)`: Blocking. Returns `Result<void, Error>`.
+      * `clone()`: Creates a new handle to the same channel (increments ref count).
+      * `close()`: Manually closes the channel for everyone.
+  * **`Receiver<T>`**:
+      * `recv()`: Async. Returns `Promise<Result<T, Error>>`.
+      * `recvSync()`: Blocking. Returns `Result<T, Error>`.
+      * `clone()`: Creates a new handle to the same channel.
+      * `close()`: Manually drops this handle.
 
 ### Synchronization
 

@@ -13,15 +13,8 @@ Deno.test("MPMC - Async Iterator Pattern", async () => {
 
   const received = [];
 
-  // If your library supports async iterators, this works.
-  // If not, you can implement it easily:
-  // [Symbol.asyncIterator]() { return { next: async () => { ... } } }
-
-  // Simulating manual iteration loop:
-  while (true) {
-    const res = await rx.recv();
-    if (!res.ok) break;
-    received.push(res.value);
+  for await (const value of rx) {
+    received.push(value);
   }
 
   assertEquals(received, [1, 2, 3]);
