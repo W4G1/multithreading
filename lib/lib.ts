@@ -4,6 +4,8 @@ import { getCallerLocation } from "./caller_location.ts";
 import { patchDynamicImports } from "./patch_import.ts";
 import { WorkerPool } from "./pool.ts";
 import type { JoinHandle, Result, ThreadTask } from "./types.ts";
+import { toSerialized } from "./shared.ts";
+import { Mutex } from "./sync/mutex.ts";
 
 export * from "./sync/mod.ts";
 export { SharedJsonBuffer } from "./json_buffer.ts";
@@ -32,6 +34,23 @@ const moveTag = Symbol.for("Thread.move");
 export type MovedData<T extends any[]> = T & { readonly [moveTag]: true };
 
 export function move<Args extends any[]>(...args: Args): MovedData<Args> {
+  // Check if SharedArrayBuffer is available in this environment
+  if (typeof SharedArrayBuffer !== "undefined") {
+    for (const arg of args) {
+      const isRawSAB = arg instanceof SharedArrayBuffer;
+      // Check if it's a TypedArray (e.g. Uint8Array) viewing a Shared buffer
+      const isViewSAB = ArrayBuffer.isView(arg) &&
+        arg.buffer instanceof SharedArrayBuffer;
+      const isLibrarySAB = arg[toSerialized] && !(arg instanceof Mutex);
+
+      if (isRawSAB || isViewSAB || isLibrarySAB) {
+        console.warn(
+          "Warning: You are passing a SharedArrayBuffer (or view) to a worker without locking. Please wrap this data in a Mutex() to prevent race conditions.",
+        );
+      }
+    }
+  }
+
   return Object.defineProperty(args, moveTag, {
     enumerable: false,
     configurable: false,
