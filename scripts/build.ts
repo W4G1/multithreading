@@ -85,7 +85,7 @@ console.log("[Build] Compiling TypeScript...");
 const entryPoints = ["./lib/lib.ts", "./lib/worker.ts"];
 
 const compilerOptions: ts.CompilerOptions = {
-  target: ts.ScriptTarget.ESNext,
+  target: ts.ScriptTarget.ES2020,
   module: ts.ModuleKind.ESNext,
   moduleResolution: ts.ModuleResolutionKind.Bundler,
   declaration: true,
