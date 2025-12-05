@@ -277,6 +277,57 @@ spawn(move(mutex, cv), async (lock, cond) => {
 
 -----
 
+## Channels (MPMC)
+
+For higher-level communication, this library provides a **Multi-Producer, Multi-Consumer (MPMC)** bounded channel. This primitive mimics Rust's `std::sync::mpsc` but allows for multiple consumers. It acts as a thread-safe queue that handles backpressure, blocking receivers when empty and blocking senders when full.
+
+Channels are the preferred way to coordinate complex workflows (like job queues or pipelines) between workers without manually managing locks.
+
+### Key Features
+
+  * **Arbitrary JSON Data:** Channels are backed by `SharedJsonBuffer`, allowing you to send any JSON-serializable value (objects, arrays, strings, numbers, booleans) through the channel, not just raw integers.
+  * **Bounded:** You define a capacity. If the channel is full, `send()` waits. If empty, `recv()` waits.
+  * **Clonable:** Both `Sender` and `Receiver` can be cloned and moved to different workers.
+  * **Reference Counted:** The channel automatically closes when all Senders are dropped (indicating no more data will arrive) or all Receivers are dropped.
+
+### Example: Worker Pipeline with Objects
+
+```typescript
+import { spawn, move, channel } from "multithreading";
+
+// Create a channel that holds objects
+const [tx, rx] = channel<{ hello: string }>();
+
+// Producer Thread
+spawn(move(tx), async (sender) => {
+  await sender.send({ hello: "world" });
+  await sender.send({ hello: "multithreading" });
+  // Sender is destroyed here, automatically closing the channel
+});
+
+// Consumer Thread
+spawn(move(rx), async (receiver) => {
+  while (true) {
+    const res = await receiver.recv();
+    
+    // Stop if the channel is closed (all senders finished)
+    if (!res.ok) break; 
+    
+    console.log(res.value); // { hello: "world" }
+  }
+});
+
+// We can also consume on the main thread
+while (true) {
+  const res = await receiver.recv();
+  
+  // Stop if the channel is closed (all senders finished)
+  if (!res.ok) break; 
+  
+  console.log(res.value); // { hello: "world" }
+}
+```
+
 ## Importing Modules in Workers
 
 One of the most difficult aspects of Web Workers is handling imports. This library handles this automatically, enabling you to use dynamic `await import()` calls inside your spawned functions.

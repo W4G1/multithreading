@@ -13,10 +13,6 @@ Deno.test("MPMC - Auto Close via 'using' (Sender Drop)", async () => {
     // Worker exits -> Ref count decrements
   });
 
-  // The Main Thread must relinquish its handle.
-  // Otherwise, RefCount never hits 0.
-  tx[Symbol.dispose]();
-
   const r1 = await rx.recv();
   const r2 = await rx.recv();
   const r3 = await rx.recv();

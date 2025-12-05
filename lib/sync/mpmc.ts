@@ -19,7 +19,7 @@ const CAP_IDX = 3;
 // Reference Counting Indices
 const TX_COUNT_IDX = 4;
 const RX_COUNT_IDX = 5;
-const META_SIZE = 6; // Increased from 4 to 6
+const META_SIZE = 6;
 
 // --- Internal Data Container ---
 class ChannelInternals<T> implements Serializable {
@@ -83,27 +83,23 @@ export class Sender<T> implements Serializable, Disposable {
     register(this);
   }
 
-  // Track if this specific JS instance has been disposed to prevent double-decrement
-  private _disposed = false;
+  private disposed = false;
 
   constructor(private internals: ChannelInternals<T>) {}
 
   clone(): Sender<T> {
-    // Increment global sender count
-    if (this._disposed) throw new Error("Cannot clone disposed Sender");
+    if (this.disposed) throw new Error("Cannot clone disposed Sender");
     Atomics.add(this.internals.state, TX_COUNT_IDX, 1);
     return new Sender(this.internals);
   }
 
   async send(value: T): Promise<Result<void, Error>> {
-    if (this._disposed) {
+    if (this.disposed) {
       return { ok: false, error: new Error("Sender is disposed") };
     }
-
     const { state, items, sendLock, slotsAvailable, itemsAvailable } =
       this.internals;
 
-    // Check if receivers exist (Optional: mimics Rust behavior to fail fast if no listeners)
     if (Atomics.load(state, RX_COUNT_IDX) === 0) {
       return { ok: false, error: new Error("Channel closed (No Receivers)") };
     }
@@ -136,10 +132,9 @@ export class Sender<T> implements Serializable, Disposable {
   }
 
   sendSync(value: T): Result<void, Error> {
-    if (this._disposed) {
+    if (this.disposed) {
       return { ok: false, error: new Error("Sender is disposed") };
     }
-
     const { state, items, sendLock, slotsAvailable, itemsAvailable } =
       this.internals;
 
@@ -178,27 +173,19 @@ export class Sender<T> implements Serializable, Disposable {
   }
 
   close() {
-    // If the instance is disposed, we generally shouldn't allow method calls,
-    // BUT close() is idempotent and safe.
-    // If you want to keep this guard, ensure dispose calls close BEFORE setting the flag.
-    if (this._disposed) return;
+    if (this.disposed) return;
 
     const { state, slotsAvailable, itemsAvailable, sendLock, recvLock } =
       this.internals;
 
-    // Optimization: Check before locking to avoid unnecessary contention
     if (Atomics.load(state, CLOSED_IDX) === 1) return;
 
     const g1 = sendLock.acquireSync();
     const g2 = recvLock.acquireSync();
 
     try {
-      // Double-check inside lock
       if (Atomics.load(state, CLOSED_IDX) === 1) return;
-
       Atomics.store(state, CLOSED_IDX, 1);
-
-      // Flood wakeups so everyone unblocks
       slotsAvailable.release(1_073_741_823);
       itemsAvailable.release(1_073_741_823);
     } finally {
@@ -208,27 +195,29 @@ export class Sender<T> implements Serializable, Disposable {
   }
 
   [Symbol.dispose]() {
-    // 1. Check guard
-    if (this._disposed) return;
+    // If it was moved (serialized), _disposed is true, so this does nothing.
+    // If it was NOT moved, we decrement.
+    if (this.disposed) return;
 
-    // 2. Perform logic (decrement count)
     const prevCount = Atomics.sub(this.internals.state, TX_COUNT_IDX, 1);
-
-    // 3. If we were the last sender, CLOSE the channel.
-    // We must do this BEFORE setting _disposed = true, otherwise
-    // this.close() will return early.
     if (prevCount === 1) {
       this.close();
     }
-
-    // 4. Set flag last
-    this._disposed = true;
+    this.disposed = true;
   }
 
   [toSerialized]() {
-    // Increment count immediately when putting on the wire.
-    // This protects the channel from being closed while the message is in transit.
-    Atomics.add(this.internals.state, TX_COUNT_IDX, 1);
+    // --- CHANGE IS HERE ---
+    if (this.disposed) {
+      throw new Error("Cannot move a disposed Sender");
+    }
+
+    // 1. Mark as disposed LOCALLY. You cannot use this handle anymore on this thread.
+    this.disposed = true;
+
+    // 2. We do NOT increment the count.
+    // We are transferring ownership of the EXISTING count to the worker.
+
     return serialize(this.internals);
   }
 
@@ -247,22 +236,20 @@ export class Receiver<T> implements Serializable, Disposable {
     register(this);
   }
 
-  private _disposed = false;
+  private disposed = false;
 
   constructor(private internals: ChannelInternals<T>) {}
 
   clone(): Receiver<T> {
-    if (this._disposed) throw new Error("Cannot clone disposed Receiver");
-    // Increment RX count
+    if (this.disposed) throw new Error("Cannot clone disposed Receiver");
     Atomics.add(this.internals.state, RX_COUNT_IDX, 1);
     return new Receiver(this.internals);
   }
 
   async recv(): Promise<Result<T, Error>> {
-    if (this._disposed) {
+    if (this.disposed) {
       return { ok: false, error: new Error("Receiver disposed") };
     }
-
     const { state, items, recvLock, itemsAvailable, slotsAvailable } =
       this.internals;
 
@@ -299,10 +286,9 @@ export class Receiver<T> implements Serializable, Disposable {
   }
 
   recvSync(): Result<T, Error> {
-    if (this._disposed) {
+    if (this.disposed) {
       return { ok: false, error: new Error("Receiver disposed") };
     }
-
     const { state, items, recvLock, itemsAvailable, slotsAvailable } =
       this.internals;
 
@@ -346,20 +332,26 @@ export class Receiver<T> implements Serializable, Disposable {
    * Decrements ref count. If 0, we treat the channel as closed.
    */
   [Symbol.dispose]() {
-    if (this._disposed) return;
-    this._disposed = true;
+    if (this.disposed) return;
+    this.disposed = true;
 
     const prevCount = Atomics.sub(this.internals.state, RX_COUNT_IDX, 1);
     if (prevCount === 1) {
       // If no receivers are left, we force close the channel so Senders don't block forever.
       const sender = new Sender(this.internals);
-      sender.close(); // Helper to trigger the internal close logic
+      sender.close();
     }
   }
 
   [toSerialized]() {
-    // Increment count for the wire reference
-    Atomics.add(this.internals.state, RX_COUNT_IDX, 1);
+    if (this.disposed) {
+      throw new Error("Cannot move a disposed Receiver");
+    }
+
+    // Kill local handle
+    this.disposed = true;
+
+    // Transfer ownership (No increment)
     return serialize(this.internals);
   }
 
