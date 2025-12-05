@@ -1,0 +1,406 @@
+// @ts-nocheck This is a polyfill file
+import {
+  deserialize,
+  register,
+  type Serializable,
+  serialize,
+  toDeserialized,
+  toSerialized,
+} from "../shared.ts";
+import type { Result } from "../types.ts";
+import { Semaphore } from "./semaphore.ts";
+import { SharedJsonBuffer } from "../json_buffer.ts";
+
+// --- Memory Layout Constants ---
+const HEAD_IDX = 0;
+const TAIL_IDX = 1;
+const CLOSED_IDX = 2;
+const CAP_IDX = 3;
+// Reference Counting Indices
+const TX_COUNT_IDX = 4;
+const RX_COUNT_IDX = 5;
+const META_SIZE = 6; // Increased from 4 to 6
+
+// --- Internal Data Container ---
+class ChannelInternals<T> implements Serializable {
+  static {
+    register(this);
+  }
+
+  constructor(
+    public state: Int32Array<SharedArrayBuffer>,
+    public items: SharedJsonBuffer<(T | null)[]>,
+    public sendLock: Semaphore,
+    public recvLock: Semaphore,
+    public itemsAvailable: Semaphore,
+    public slotsAvailable: Semaphore,
+  ) {}
+
+  [toSerialized]() {
+    const itemsSer = serialize(this.items);
+    const sendLockSer = serialize(this.sendLock);
+    const recvLockSer = serialize(this.recvLock);
+    const itemsAvailSer = serialize(this.itemsAvailable);
+    const slotsAvailSer = serialize(this.slotsAvailable);
+
+    return {
+      value: {
+        state: this.state.buffer,
+        items: itemsSer.value,
+        sendLock: sendLockSer.value,
+        recvLock: recvLockSer.value,
+        itemsAvailable: itemsAvailSer.value,
+        slotsAvailable: slotsAvailSer.value,
+      },
+      transfer: [
+        ...itemsSer.transfer,
+        ...sendLockSer.transfer,
+        ...recvLockSer.transfer,
+        ...itemsAvailSer.transfer,
+        ...slotsAvailSer.transfer,
+      ],
+    };
+  }
+
+  static [toDeserialized](
+    data: ReturnType<ChannelInternals<any>[typeof toSerialized]>["value"],
+  ) {
+    return new ChannelInternals(
+      new Int32Array(data.state),
+      deserialize(data.items),
+      deserialize(data.sendLock),
+      deserialize(data.recvLock),
+      deserialize(data.itemsAvailable),
+      deserialize(data.slotsAvailable),
+    );
+  }
+}
+
+// --- Sender ---
+
+export class Sender<T> implements Serializable, Disposable {
+  static {
+    register(this);
+  }
+
+  // Track if this specific JS instance has been disposed to prevent double-decrement
+  private _disposed = false;
+
+  constructor(private internals: ChannelInternals<T>) {}
+
+  clone(): Sender<T> {
+    // Increment global sender count
+    if (this._disposed) throw new Error("Cannot clone disposed Sender");
+    Atomics.add(this.internals.state, TX_COUNT_IDX, 1);
+    return new Sender(this.internals);
+  }
+
+  async send(value: T): Promise<Result<void, Error>> {
+    if (this._disposed) {
+      return { ok: false, error: new Error("Sender is disposed") };
+    }
+
+    const { state, items, sendLock, slotsAvailable, itemsAvailable } =
+      this.internals;
+
+    // Check if receivers exist (Optional: mimics Rust behavior to fail fast if no listeners)
+    if (Atomics.load(state, RX_COUNT_IDX) === 0) {
+      return { ok: false, error: new Error("Channel closed (No Receivers)") };
+    }
+
+    const slotToken = await slotsAvailable.acquire();
+
+    if (Atomics.load(state, CLOSED_IDX) === 1) {
+      slotToken[Symbol.dispose]();
+      return { ok: false, error: new Error("Channel closed") };
+    }
+
+    try {
+      using _lockGuard = await sendLock.acquire();
+
+      if (Atomics.load(state, CLOSED_IDX) === 1) {
+        slotToken[Symbol.dispose]();
+        return { ok: false, error: new Error("Channel closed") };
+      }
+
+      const tail = state[TAIL_IDX];
+      items[tail] = value;
+      state[TAIL_IDX] = (tail + 1) % state[CAP_IDX];
+    } catch (err) {
+      slotToken[Symbol.dispose]();
+      throw err;
+    }
+
+    itemsAvailable.release(1);
+    return { ok: true, value: undefined };
+  }
+
+  sendSync(value: T): Result<void, Error> {
+    if (this._disposed) {
+      return { ok: false, error: new Error("Sender is disposed") };
+    }
+
+    const { state, items, sendLock, slotsAvailable, itemsAvailable } =
+      this.internals;
+
+    if (Atomics.load(state, RX_COUNT_IDX) === 0) {
+      return { ok: false, error: new Error("Channel closed (No Receivers)") };
+    }
+
+    const slotToken = slotsAvailable.acquireSync();
+
+    if (Atomics.load(state, CLOSED_IDX) === 1) {
+      slotToken[Symbol.dispose]();
+      return { ok: false, error: new Error("Channel closed") };
+    }
+
+    try {
+      const lockToken = sendLock.acquireSync();
+      try {
+        if (Atomics.load(state, CLOSED_IDX) === 1) {
+          slotToken[Symbol.dispose]();
+          return { ok: false, error: new Error("Channel closed") };
+        }
+
+        const tail = state[TAIL_IDX];
+        items[tail] = value;
+        state[TAIL_IDX] = (tail + 1) % state[CAP_IDX];
+      } finally {
+        lockToken[Symbol.dispose]();
+      }
+
+      itemsAvailable.release(1);
+      return { ok: true, value: undefined };
+    } catch (err) {
+      slotToken[Symbol.dispose]();
+      throw err;
+    }
+  }
+
+  close() {
+    // If the instance is disposed, we generally shouldn't allow method calls,
+    // BUT close() is idempotent and safe.
+    // If you want to keep this guard, ensure dispose calls close BEFORE setting the flag.
+    if (this._disposed) return;
+
+    const { state, slotsAvailable, itemsAvailable, sendLock, recvLock } =
+      this.internals;
+
+    // Optimization: Check before locking to avoid unnecessary contention
+    if (Atomics.load(state, CLOSED_IDX) === 1) return;
+
+    const g1 = sendLock.acquireSync();
+    const g2 = recvLock.acquireSync();
+
+    try {
+      // Double-check inside lock
+      if (Atomics.load(state, CLOSED_IDX) === 1) return;
+
+      Atomics.store(state, CLOSED_IDX, 1);
+
+      // Flood wakeups so everyone unblocks
+      slotsAvailable.release(1_073_741_823);
+      itemsAvailable.release(1_073_741_823);
+    } finally {
+      g1[Symbol.dispose]();
+      g2[Symbol.dispose]();
+    }
+  }
+
+  [Symbol.dispose]() {
+    // 1. Check guard
+    if (this._disposed) return;
+
+    // 2. Perform logic (decrement count)
+    const prevCount = Atomics.sub(this.internals.state, TX_COUNT_IDX, 1);
+
+    // 3. If we were the last sender, CLOSE the channel.
+    // We must do this BEFORE setting _disposed = true, otherwise
+    // this.close() will return early.
+    if (prevCount === 1) {
+      this.close();
+    }
+
+    // 4. Set flag last
+    this._disposed = true;
+  }
+
+  [toSerialized]() {
+    // Increment count immediately when putting on the wire.
+    // This protects the channel from being closed while the message is in transit.
+    Atomics.add(this.internals.state, TX_COUNT_IDX, 1);
+    return serialize(this.internals);
+  }
+
+  static [toDeserialized](
+    obj: ReturnType<Sender<any>[typeof toSerialized]>["value"],
+  ) {
+    const internals = deserialize(obj);
+    return new Sender(internals);
+  }
+}
+
+// --- Receiver ---
+
+export class Receiver<T> implements Serializable, Disposable {
+  static {
+    register(this);
+  }
+
+  private _disposed = false;
+
+  constructor(private internals: ChannelInternals<T>) {}
+
+  clone(): Receiver<T> {
+    if (this._disposed) throw new Error("Cannot clone disposed Receiver");
+    // Increment RX count
+    Atomics.add(this.internals.state, RX_COUNT_IDX, 1);
+    return new Receiver(this.internals);
+  }
+
+  async recv(): Promise<Result<T, Error>> {
+    if (this._disposed) {
+      return { ok: false, error: new Error("Receiver disposed") };
+    }
+
+    const { state, items, recvLock, itemsAvailable, slotsAvailable } =
+      this.internals;
+
+    const itemToken = await itemsAvailable.acquire();
+    let val: T;
+
+    try {
+      using _lockGuard = await recvLock.acquire();
+
+      const head = state[HEAD_IDX];
+      val = items[head] as T;
+
+      if (val === null) {
+        if (Atomics.load(state, CLOSED_IDX) === 1) {
+          itemToken[Symbol.dispose]();
+          return { ok: false, error: new Error("Channel closed") };
+        }
+        itemToken[Symbol.dispose]();
+        return {
+          ok: false,
+          error: new Error("Spurious wakeup or illegal null value"),
+        };
+      }
+
+      items[head] = null;
+      state[HEAD_IDX] = (head + 1) % state[CAP_IDX];
+    } catch (err) {
+      itemToken[Symbol.dispose]();
+      throw err;
+    }
+
+    slotsAvailable.release(1);
+    return { ok: true, value: val };
+  }
+
+  recvSync(): Result<T, Error> {
+    if (this._disposed) {
+      return { ok: false, error: new Error("Receiver disposed") };
+    }
+
+    const { state, items, recvLock, itemsAvailable, slotsAvailable } =
+      this.internals;
+
+    const itemToken = itemsAvailable.acquireSync();
+    let val: T;
+
+    try {
+      const lockToken = recvLock.acquireSync();
+      try {
+        const head = state[HEAD_IDX];
+        val = items[head] as T;
+
+        if (val === null) {
+          if (Atomics.load(state, CLOSED_IDX) === 1) {
+            itemToken[Symbol.dispose]();
+            return { ok: false, error: new Error("Channel closed") };
+          }
+          itemToken[Symbol.dispose]();
+          return {
+            ok: false,
+            error: new Error("Spurious wakeup or illegal null value"),
+          };
+        }
+
+        items[head] = null;
+        state[HEAD_IDX] = (head + 1) % state[CAP_IDX];
+      } finally {
+        lockToken[Symbol.dispose]();
+      }
+
+      slotsAvailable.release(1);
+      return { ok: true, value: val };
+    } catch (err) {
+      itemToken[Symbol.dispose]();
+      throw err;
+    }
+  }
+
+  /**
+   * Dispose Receiver.
+   * Decrements ref count. If 0, we treat the channel as closed.
+   */
+  [Symbol.dispose]() {
+    if (this._disposed) return;
+    this._disposed = true;
+
+    const prevCount = Atomics.sub(this.internals.state, RX_COUNT_IDX, 1);
+    if (prevCount === 1) {
+      // If no receivers are left, we force close the channel so Senders don't block forever.
+      const sender = new Sender(this.internals);
+      sender.close(); // Helper to trigger the internal close logic
+    }
+  }
+
+  [toSerialized]() {
+    // Increment count for the wire reference
+    Atomics.add(this.internals.state, RX_COUNT_IDX, 1);
+    return serialize(this.internals);
+  }
+
+  static [toDeserialized](
+    obj: ReturnType<Receiver<any>[typeof toSerialized]>["value"],
+  ) {
+    const internals = deserialize(obj);
+    return new Receiver(internals);
+  }
+}
+
+// --- Factory ---
+
+export function channel<T>(capacity: number = 32): [Sender<T>, Receiver<T>] {
+  const stateSab = new SharedArrayBuffer(META_SIZE * 4);
+  const state = new Int32Array(stateSab);
+  state[CAP_IDX] = capacity;
+  state[HEAD_IDX] = 0;
+  state[TAIL_IDX] = 0;
+  state[CLOSED_IDX] = 0;
+
+  // Initialize counts
+  state[TX_COUNT_IDX] = 1;
+  state[RX_COUNT_IDX] = 1;
+
+  const initialData = new Array<T | null>(capacity).fill(null);
+  const items = new SharedJsonBuffer(initialData);
+
+  const slotsAvailable = new Semaphore(capacity);
+  const itemsAvailable = new Semaphore(0);
+  const sendLock = new Semaphore(1);
+  const recvLock = new Semaphore(1);
+
+  const internals = new ChannelInternals(
+    state,
+    items,
+    sendLock,
+    recvLock,
+    itemsAvailable,
+    slotsAvailable,
+  );
+
+  return [new Sender(internals), new Receiver(internals)];
+}

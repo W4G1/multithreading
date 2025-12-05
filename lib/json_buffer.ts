@@ -45,7 +45,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
   // Caches
   private _stringCache = new Map<number, string>();
-  private proxyCache = new Map<number, any>();
+  private proxyCache = new Map<number, WeakRef<any>>();
   private propertyHints = new Map<string, number>();
 
   // GC State
@@ -326,18 +326,22 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
     const len = this._u32[ptr >> 2]!;
     const offset = ptr + 4;
-    let str: string;
 
-    if (len < 128) {
+    // Optimization: Short strings usually fit in stack/args limit
+    // and pure JS loop is often faster than TextDecoder overhead for < 20 chars
+    if (len < 64) {
       let res = "";
       for (let i = 0; i < len; i++) {
         res += String.fromCharCode(this._u8[offset + i]!);
       }
-      str = res;
-    } else {
-      str = this._textDecoder.decode(this._u8.subarray(offset, offset + len));
+      this._stringCache.set(ptr, res);
+      return res;
     }
 
+    // Fallback for long strings or special chars
+    const str = this._textDecoder.decode(
+      this._u8.subarray(offset, offset + len),
+    );
     this._stringCache.set(ptr, str);
     return str;
   }
@@ -460,9 +464,9 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
       const ptr = target.__ptr;
       if (ptr === 0) return undefined;
 
+      // Standard resolution
       let curr = ptr;
       let type = this._u32[curr >> 2]!;
-
       if (type !== TYPE_MOVED) {
         this.s_len = this._u32[(curr + 8) >> 2]!;
         this.s_start = curr + 12;
@@ -473,21 +477,23 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
       const count = this.s_len;
       const start = this.s_start;
 
-      const hint = this.propertyHints.get(prop);
+      // Check hint
+      const hint = this.propertyHints.get(String(prop));
       if (hint !== undefined && hint < count) {
-        const entryOffset = start + (hint * 12);
+        const entryOffset = start + hint * 12;
         const keyPtr = this._u32[entryOffset >> 2]!;
         const keyStr = this.readString(keyPtr);
         if (keyStr === prop) return this.readSlot(entryOffset + 4);
       }
 
+      // Scan
       for (let i = 0; i < count; i++) {
         const entryOffset = start + i * 12;
         const keyPtr = this._u32[entryOffset >> 2]!;
         const key = this.readString(keyPtr);
 
         if (key === prop) {
-          this.propertyHints.set(prop, i);
+          this.propertyHints.set(String(prop), i);
           return this.readSlot(entryOffset + 4);
         }
       }
@@ -496,7 +502,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
     set: (target, prop, value) => {
       if (typeof prop === "symbol") return false;
-      this.objectSet(target, prop, value);
+      this.objectSet(target, String(prop), value);
       return true;
     },
 
@@ -508,18 +514,71 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
     ownKeys: (target) => {
       this.resolvePtr(target.__ptr);
       if (target.__ptr === 0) return [];
+
       const keys: string[] = [];
+      const start = this.s_start;
+
+      // Pre-fill hints during iteration
       for (let i = 0; i < this.s_len; i++) {
-        const keyPtr = this._u32[(this.s_start + i * 12) >> 2]!;
-        keys.push(this.readString(keyPtr));
+        const keyPtr = this._u32[(start + i * 12) >> 2]!;
+        const key = this.readString(keyPtr);
+
+        // When GOPD is called immediately after, it will hit this hint.
+        this.propertyHints.set(key, i);
+
+        keys.push(key);
       }
       return keys;
     },
 
     getOwnPropertyDescriptor: (target, prop) => {
-      const value = this.objectHandler.get!(target, prop, target);
-      if (value === undefined) return undefined;
-      return { enumerable: true, configurable: true, writable: true, value };
+      // 1. Reset state to THIS object
+      this.resolvePtr(target.__ptr);
+      if (target.__ptr === 0) return undefined;
+
+      const count = this.s_len;
+      const start = this.s_start;
+      const propStr = String(prop);
+
+      // 2. Check hint
+      const hint = this.propertyHints.get(propStr);
+      if (hint !== undefined && hint < count) {
+        const entryOffset = start + hint * 12;
+        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyStr = this.readString(keyPtr);
+
+        if (keyStr === propStr) {
+          // SAFE: We just called resolvePtr, so we can read the value now
+          const val = this.readSlot(entryOffset + 4);
+          return {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: val,
+          };
+        }
+      }
+
+      // 3. Scan
+      for (let i = 0; i < count; i++) {
+        const entryOffset = start + i * 12;
+        const keyPtr = this._u32[entryOffset >> 2]!;
+        const key = this.readString(keyPtr);
+
+        if (key === propStr) {
+          this.propertyHints.set(propStr, i);
+          // SAFE: We just called resolvePtr, so we can read the value now
+          const val = this.readSlot(entryOffset + 4);
+          return {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: val,
+          };
+        }
+      }
+
+      return undefined;
     },
   };
 
@@ -527,12 +586,18 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
     this.resolvePtr(ptr);
     const resolvedPtr = this.s_ptr;
 
+    // Check cache
     if (this.proxyCache.has(resolvedPtr)) {
-      return this.proxyCache.get(resolvedPtr);
+      const ref = this.proxyCache.get(resolvedPtr);
+      const cached = ref?.deref();
+      if (cached) return cached; // Return if still in memory
     }
 
     const type = this._u32[resolvedPtr >> 2]!;
-    const target = {};
+
+    // Initialize proper target for formatting
+    const target = type === TYPE_ARRAY ? [] : {};
+
     Object.defineProperty(target, "__ptr", {
       value: resolvedPtr,
       writable: true,
@@ -546,7 +611,9 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
       type === TYPE_ARRAY ? this.arrayHandler : this.objectHandler,
     );
 
-    this.proxyCache.set(resolvedPtr, proxy);
+    // Store as WeakRef
+    this.proxyCache.set(resolvedPtr, new WeakRef(proxy));
+
     return proxy;
   }
 
@@ -769,6 +836,27 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
           configurable: false,
         };
       }
+
+      const idx = Number(prop);
+      if (!isNaN(idx)) {
+        // 1. Reset state to THIS array
+        this.resolvePtr(target.__ptr);
+
+        // 2. Check bounds
+        if (idx >= 0 && idx < this.s_len) {
+          // 3. Read Value
+          // Because we called resolvePtr right above, this.s_start is correct.
+          const val = this.readSlot(this.s_start + idx * 8);
+
+          return {
+            value: val,
+            enumerable: true,
+            configurable: true,
+            writable: true,
+          };
+        }
+      }
+
       return undefined;
     },
   };
