@@ -1,4 +1,3 @@
-// @ts-nocheck This is a polyfill file
 import {
   deserialize,
   register,
@@ -119,9 +118,9 @@ export class Sender<T> implements Serializable, Disposable {
         return { ok: false, error: new Error("Channel closed") };
       }
 
-      const tail = state[TAIL_IDX];
+      const tail = state[TAIL_IDX]!;
       items[tail] = value;
-      state[TAIL_IDX] = (tail + 1) % state[CAP_IDX];
+      state[TAIL_IDX] = (tail + 1) % state[CAP_IDX]!;
     } catch (err) {
       slotToken[Symbol.dispose]();
       throw err;
@@ -157,9 +156,9 @@ export class Sender<T> implements Serializable, Disposable {
           return { ok: false, error: new Error("Channel closed") };
         }
 
-        const tail = state[TAIL_IDX];
+        const tail = state[TAIL_IDX]!;
         items[tail] = value;
-        state[TAIL_IDX] = (tail + 1) % state[CAP_IDX];
+        state[TAIL_IDX] = (tail + 1) % state[CAP_IDX]!;
       } finally {
         lockToken[Symbol.dispose]();
       }
@@ -259,7 +258,7 @@ export class Receiver<T> implements Serializable, Disposable {
     try {
       using _lockGuard = await recvLock.acquire();
 
-      const head = state[HEAD_IDX];
+      const head = state[HEAD_IDX]!;
       val = items[head] as T;
 
       if (val === null) {
@@ -275,7 +274,7 @@ export class Receiver<T> implements Serializable, Disposable {
       }
 
       items[head] = null;
-      state[HEAD_IDX] = (head + 1) % state[CAP_IDX];
+      state[HEAD_IDX] = (head + 1) % state[CAP_IDX]!;
     } catch (err) {
       itemToken[Symbol.dispose]();
       throw err;
@@ -298,7 +297,7 @@ export class Receiver<T> implements Serializable, Disposable {
     try {
       const lockToken = recvLock.acquireSync();
       try {
-        const head = state[HEAD_IDX];
+        const head = state[HEAD_IDX]!;
         val = items[head] as T;
 
         if (val === null) {
@@ -314,7 +313,7 @@ export class Receiver<T> implements Serializable, Disposable {
         }
 
         items[head] = null;
-        state[HEAD_IDX] = (head + 1) % state[CAP_IDX];
+        state[HEAD_IDX] = (head + 1) % state[CAP_IDX]!;
       } finally {
         lockToken[Symbol.dispose]();
       }

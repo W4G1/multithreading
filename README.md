@@ -1,4 +1,4 @@
-<img width="200" height="170" alt="Logo" src="https://github.com/user-attachments/assets/e7750ae6-3acd-4c81-9417-3979f51535f3" />
+<img width="180" height="153" alt="Logo" src="https://github.com/user-attachments/assets/e7750ae6-3acd-4c81-9417-3979f51535f3" />
 
 <br/>
 <br/>
@@ -47,7 +47,7 @@ const handle = spawn(() => {
 const result = await handle.join();
 
 if (result.ok) {
-  console.log("Result:", result.value); // 0.3378467071314606
+  console.log("Result:", result.value); // 0.6378467071314606
 } else {
   console.error("Worker error:", result.error);
 }
@@ -57,7 +57,7 @@ if (result.ok) {
 
 ## Passing Data: The `move()` Function
 
-Because Web Workers run in a completely isolated context, functions passed to `spawn` cannot capture variables from their outer scope (closures). If you attempt to use a variable inside the worker that was defined outside of it, the code will fail.
+Because Web Workers run in a completely isolated context, functions passed to `spawn` cannot capture variables from their outer scope. If you attempt to use a variable inside the worker that was defined outside of it, the code will fail.
 
 To get data from your main thread into the worker, you have to use the `move()` function.
 
@@ -71,12 +71,12 @@ The `move` function accepts variadic arguments. These arguments are passed to th
 ```typescript
 import { spawn, move } from "multithreading";
 
+// Will be transfered
 const largeData = new Uint8Array(1024 * 1024 * 10); // 10MB
+// Will be cloned
 const metaData = { id: 1 };
 
 // We pass arguments as a comma-separated list.
-// 'largeData' is MOVED (zero-copy) because it is transferable.
-// 'metaData' is CLONED because it is a standard object.
 const handle = spawn(move(largeData, metaData), (data, meta) => {
   console.log("Processing ID:", meta.id);
   return data.byteLength;
@@ -92,7 +92,7 @@ await handle.join();
 `SharedJsonBuffer` enables Mutex-protected shared memory for JSON objects, eliminating the overhead of `postMessage` data copying. Unlike standard buffers, it handles serialization automatically. It supports partial updates, re-serializing only changed bytes rather than the entire object tree for high-performance state synchronization.
 
 ```typescript
-import { move, Mutex, SharedJsonBuffer, spawn } from "./lib/lib.ts";
+import { move, Mutex, SharedJsonBuffer, spawn } from "multithreading";
 
 const sharedState = new Mutex(new SharedJsonBuffer({
   score: 0,
@@ -140,17 +140,15 @@ A `Mutex` ensures that only one thread can access a specific piece of data at a 
 This library leverages the [Explicit Resource Management](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/using) proposal (`using` keyword). When you acquire a lock, it returns a guard. When that guard goes out of scope, the lock is automatically released.
 
 ```typescript
-import { spawn, move, Mutex, SharedArrayBuffer } from "multithreading";
+import { spawn, move, Mutex } from "multithreading";
 
 const buffer = new SharedArrayBuffer(4);
 const counterMutex = new Mutex(new Int32Array(buffer));
 
 spawn(move(counterMutex), async (mutex) => {
-  // 'using' automatically calls dispose() at the end of the block
-  // awaiting acquire() ensures we don't block the thread while waiting
+  // 'using' automatically calls dispose() at the end of the scope
   using guard = await mutex.acquire();
   
-  // Critical Section
   guard.value[0]++;
   
   // End of scope: Lock is automatically released here
@@ -159,10 +157,10 @@ spawn(move(counterMutex), async (mutex) => {
 
 #### Option B: Manual Management (Bun / Standard JS)
 
-If you are using **Bun** (which doesn't natively supports `using` but uses a transpiler which is incompatible with this library) or prefer standard JavaScript syntax, you must manually release the lock using `drop()`. Always use a `try...finally` block to ensure the lock is released even if an error occurs.
+If you are using **Bun** (which doesn't natively support `using` and uses a transpiler which is incompatible with this library) or prefer standard JavaScript syntax, you must manually release the lock using `drop()`. Always use a `try...finally` block to ensure the lock is released even if an error occurs.
 
 ```typescript
-import { spawn, move, Mutex, SharedArrayBuffer } from "multithreading";
+import { spawn, move, Mutex } from "multithreading";
 
 const buffer = new SharedArrayBuffer(4);
 const counterMutex = new Mutex(new Int32Array(buffer));
@@ -189,7 +187,7 @@ spawn(move(counterMutex), async (mutex) => {
 A `RwLock` is optimized for scenarios where data is read often but written rarely. It allows **multiple** simultaneous readers but only **one** writer.
 
 ```typescript
-import { spawn, move, RwLock, SharedArrayBuffer } from "multithreading";
+import { spawn, move, RwLock } from "multithreading";
 
 const lock = new RwLock(new Int32Array(new SharedArrayBuffer(4)));
 
@@ -258,7 +256,7 @@ spawn(move(semaphore), async (sem) => {
 A `Condvar` allows threads to wait for a specific condition to become true. It saves CPU resources by putting the task to sleep until it is notified, rather than constantly checking a value.
 
 ```typescript
-import { spawn, move, Mutex, Condvar, SharedArrayBuffer } from "multithreading";
+import { spawn, move, Mutex, Condvar } from "multithreading";
 
 const mutex = new Mutex(new Int32Array(new SharedArrayBuffer(4)));
 const cv = new Condvar();
@@ -328,7 +326,7 @@ You can import:
 1.  **External Libraries:** Packages from npm/CDN (depending on environment).
 2.  **Relative Files:** Files relative to the file calling `spawn`.
 
-**Note:** The function passed to `spawn` must be self-contained or explicitly import what it needs. It cannot access variables from the outer scope (closures) unless they are passed via `move()`.
+**Note:** The function passed to `spawn` must be self-contained or explicitly import what it needs. It cannot access variables from the outer scope unless they are passed via `move()`.
 
 ### Example: Importing Relative Files and External Libraries
 
