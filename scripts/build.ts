@@ -138,7 +138,7 @@ const packageJson = {
   name: "multithreading",
   version: VERSION,
   description:
-    "The missing standard threading library for Node.js, Deno and Bun. Inspired by Rust.",
+    "The missing standard library for multithreading in JavaScript (Works in Node.js, Deno, Bun, Web browser).",
   keywords: [
     "multithreading",
     "threads",

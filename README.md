@@ -308,13 +308,13 @@ spawn(move(tx), async (sender) => {
 // Consumer Thread
 spawn(move(rx.clone()), async (rx) => {
   for await (const value of rx) {
-    console.log(res.value); // { hello: "world" }
+    console.log(value); // { hello: "world" }
   }
 });
 
 // Because we cloned rx, we can also receive on the main thread 
 for await (const value of rx) {
-  console.log(res.value); // { hello: "world" }
+  console.log(value); // { hello: "world" }
 }
 ```
 
