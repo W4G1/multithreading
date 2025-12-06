@@ -25,6 +25,8 @@ This library is designed to abstract away the complexity of managing `WebWorkers
 npm install multithreading
 ```
 
+See: [Browser compatibility](#browser-compatibility)
+
 ## Core Concepts
 
 JavaScript is traditionally single-threaded. To achieve true parallelism, this library uses Web Workers. However, unlike standard Workers, this library offers:
@@ -230,7 +232,7 @@ for (let i = 0; i < 10; i++) {
     console.log("Waiting for slot...");
     
     // Will wait (async) if 3 threads are already working
-    using _ = await sem.acquire(); 
+    using _slot = await sem.acquire(); 
     
     console.log("Acquired slot! Working...");
 
@@ -355,10 +357,10 @@ spawn(async () => {
   // Importing relative files
   const utils = await import("./utils.ts");
   // Importing external libraries
-  const { default: _ } = await import("lodash");
+  const { v4: uuiv4 } = await import("uuid");
 
   console.log("Magic number from relative file:", utils.magicNumber);
-  console.log("Random number via lodash:", _.random(1, 100));
+  console.log("Random UUID:", uuiv4());
   
   return utils.magicNumber;
 });
@@ -381,7 +383,7 @@ If these headers are missing, basic threading will work, but attempting to use s
 
 ### Content Security Policy (CSP)
 
-This library utilizes dynamic imports via `data:` URLs and generates worker entry points via `blob:` URLs.
+This library utilizes dynamic imports via `data:` and `blob:`  URLs to generate worker entry points from inline functions.
 
 If your application uses a Content Security Policy (CSP), you must ensure that your `script-src` directive allows the `data:` scheme and your `worker-src` directive allows the `blob:` scheme.
 
