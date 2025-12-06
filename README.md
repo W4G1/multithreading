@@ -163,7 +163,11 @@ spawn(move(counterMutex), async (mutex) => {
 
 #### Option B: Manual Management (Bun / Standard JS)
 
-If you are using **Bun** (which doesn't natively support `using` and uses a transpiler which is incompatible with this library) or prefer standard JavaScript syntax, you must manually release the lock using `drop()`. Always use a `try...finally` block to ensure the lock is released even if an error occurs.
+If you are using **Bun** or prefer standard JavaScript syntax, you must manually release the lock using `drop()`.
+
+**Note on Bun:** While Bun is supported, it's runtime automatically polyfills the `using` keyword whenever a function is stringified. This transpiled code relies on specific internal globals made available in the context where the function is serialized. Because the worker runs in a different isolated context where these globals are not registered, code with `using` will fail to execute.
+
+Always use a `try...finally` block to ensure the lock is released even if an error occurs.
 
 ```typescript
 import { spawn, move, Mutex } from "multithreading";
@@ -364,21 +368,18 @@ spawn(async () => {
 
 ## Browser Compatibility
 
-This library relies on `SharedArrayBuffer` to implement shared memory primitives. Modern browsers require pages to be **Cross-Origin Isolated** to access this API securely.
+**Core features** (like `spawn` and `move`) work in all modern browsers without special configuration.
 
-You must configure your web server to serve the application with the following HTTP headers:
+**Synchronization primitives** (`Mutex`, `RwLock`, `SharedJsonBuffer`, etc.) rely on `SharedArrayBuffer`, which requires your page to be **Cross-Origin Isolated**. To use these specific features, your server must send the following headers:
 
 ```http
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-Failure to configure these headers will result in a runtime error indicating that `SharedArrayBuffer` is not defined.
+If these headers are missing, basic threading will work, but attempting to use synchronization primitives will result in an error.
 
-**Development Environments**
-If you are using a local development server (e.g., Vite, Webpack Dev Server, or Next.js), you must explicitly configure the server settings to send these headers during local development.
-
-## Content Security Policy (CSP)
+### Content Security Policy (CSP)
 
 This library utilizes dynamic imports via `data:` URLs to generate worker entry points on the fly without requiring separate physical files.
 
