@@ -20,6 +20,9 @@ const TYPE_OBJECT = 5;
 const TYPE_ARRAY = 6;
 const TYPE_MOVED = 0xffffffff;
 
+// [Node inspect compatibility] Define Node.js custom inspect symbol
+const customInspectSymbol = Symbol.for("nodejs.util.inspect.custom");
+
 interface Pointer {
   __ptr: number;
 }
@@ -453,6 +456,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
   public objectHandler: ProxyHandler<any> = {
     get: (target, prop, receiver) => {
+      // [Node inspect compatibility] Allow symbols (like custom inspect) to pass through to the target
       if (typeof prop === "symbol") {
         if (prop === toSerialized) return () => this[toSerialized]();
         if (prop === Symbol.iterator) return undefined;
@@ -515,7 +519,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
       this.resolvePtr(target.__ptr);
       if (target.__ptr === 0) return [];
 
-      const keys: string[] = [];
+      const keys: (string | symbol)[] = [];
       const start = this.s_start;
 
       // Pre-fill hints during iteration
@@ -528,10 +532,21 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
         keys.push(key);
       }
+
+      // Include symbols from target so Node detects custom inspector
+      keys.push(
+        ...Reflect.ownKeys(target).filter((k) => typeof k === "symbol"),
+      );
       return keys;
     },
 
     getOwnPropertyDescriptor: (target, prop) => {
+      // [Node inspect compatibility]
+      // Immediately fallback for symbols to support internal Node protocols (Iterator, etc)
+      if (typeof prop === "symbol") {
+        return Reflect.getOwnPropertyDescriptor(target, prop);
+      }
+
       // 1. Reset state to THIS object
       this.resolvePtr(target.__ptr);
       if (target.__ptr === 0) return undefined;
@@ -548,7 +563,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
         const keyStr = this.readString(keyPtr);
 
         if (keyStr === propStr) {
-          // SAFE: We just called resolvePtr, so we can read the value now
+          // We just called resolvePtr, so we can read the value now
           const val = this.readSlot(entryOffset + 4);
           return {
             enumerable: true,
@@ -567,7 +582,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
         if (key === propStr) {
           this.propertyHints.set(propStr, i);
-          // SAFE: We just called resolvePtr, so we can read the value now
+          // We just called resolvePtr, so we can read the value now
           const val = this.readSlot(entryOffset + 4);
           return {
             enumerable: true,
@@ -578,7 +593,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
         }
       }
 
-      return undefined;
+      return Reflect.getOwnPropertyDescriptor(target, prop);
     },
   };
 
@@ -602,6 +617,18 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
       value: resolvedPtr,
       writable: true,
       configurable: true,
+      enumerable: false, // Ensure this is hidden
+    });
+
+    // [Node inspect compatibility]
+    // enumerable: false so it doesn't appear in the inspection of the object itself
+    Object.defineProperty(target, customInspectSymbol, {
+      value: (depth: number, options: any, inspect: any) => {
+        return this.inspectImpl(resolvedPtr, depth, options, inspect);
+      },
+      writable: true,
+      configurable: true,
+      enumerable: false,
     });
 
     this.activeTargets.add(target as Pointer);
@@ -615,6 +642,99 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
     this.proxyCache.set(resolvedPtr, new WeakRef(proxy));
 
     return proxy;
+  }
+
+  // [Node inspect compatibility]
+  private inspectImpl(
+    ptr: number,
+    depth: number,
+    options: any,
+    inspect: any,
+  ): string {
+    // 1. Handle Recursion/Depth Limit
+    if (depth < 0) {
+      this.resolvePtr(ptr);
+      const type = this._u32[this.s_ptr >> 2]!;
+      return options.stylize(
+        type === TYPE_ARRAY ? "[Array]" : "[Object]",
+        "special",
+      );
+    }
+
+    const customOptions = {
+      ...options,
+      depth: depth,
+    };
+
+    this.resolvePtr(ptr);
+    const type = this._u32[this.s_ptr >> 2]!;
+    const len = this.s_len;
+    const start = this.s_start;
+
+    // Helper to safely inject "more items"
+    const injectTruncation = (formatted: string, remaining: number) => {
+      if (remaining <= 0) return formatted;
+
+      const msg = `... ${remaining} more ${
+        type === TYPE_ARRAY ? "items" : "keys"
+      }`;
+
+      const styledMsg = options.stylize(msg, "undefined");
+
+      // Regex to find the closing bracket/brace and preceding whitespace
+      const closingRegex = /([\r\n\s]*)([\]\}])((?:\x1B\[\d+m|\s)*)$/;
+
+      return formatted.replace(closingRegex, (match, space, bracket, trail) => {
+        if (space.includes("\n")) {
+          // 'space' is the whitespace before the closing bracket (e.g., "\n" or "\n  ").
+          // We need the message to be indented one level deeper (2 spaces).
+          // We replace the first newline in the capture group with "newline + 2 spaces".
+          const deepSpace = space.replace(/\n/, "\n  ");
+
+          // 1. Comma
+          // 2. deepSpace (pushes message in)
+          // 3. Message
+          // 4. space (pushes closing bracket back out)
+          // 5. bracket
+          return `,${deepSpace}${styledMsg}${space}${bracket}${trail}`;
+        }
+
+        // Single line mode
+        return `, ${styledMsg}${bracket}${trail}`;
+      });
+    };
+
+    if (type === TYPE_ARRAY) {
+      const max = options.maxArrayLength === null
+        ? Infinity
+        : options.maxArrayLength ?? 100;
+
+      const limit = Math.min(len, max);
+      const remaining = len - limit;
+
+      const arr: any[] = [];
+      for (let i = 0; i < limit; i++) {
+        arr.push(this.readSlot(start + i * 8));
+      }
+
+      const result = inspect(arr, customOptions);
+      return injectTruncation(result, remaining);
+    } else {
+      const maxKeys = 1000;
+      const limit = Math.min(len, maxKeys);
+      const remaining = len - limit;
+
+      const obj: any = {};
+      for (let i = 0; i < limit; i++) {
+        const entryOffset = start + i * 12;
+        const keyPtr = this._u32[entryOffset >> 2]!;
+        const key = this.readString(keyPtr);
+        obj[key] = this.readSlot(entryOffset + 4);
+      }
+
+      const result = inspect(obj, customOptions);
+      return injectTruncation(result, remaining);
+    }
   }
 
   private toJSON(ptr: number): any {
@@ -770,12 +890,17 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
   private arrayHandler: ProxyHandler<any> = {
     get: (target, prop, receiver) => {
-      if (prop === toSerialized) return () => this[toSerialized]();
+      // [Node inspect compatibility] Allow symbols (like custom inspect) to pass through to the target
+      if (typeof prop === "symbol") {
+        if (prop === toSerialized) return () => this[toSerialized]();
+        if (prop === Symbol.iterator) {
+          return () => new ArrayCursor(this, target.__ptr);
+        }
+        return Reflect.get(target, prop, receiver);
+      }
+
       if (prop === "__ptr") return target.__ptr;
       if (prop === "toJSON") return () => this.toJSON(target.__ptr);
-      if (prop === Symbol.iterator) {
-        return () => new ArrayCursor(this, target.__ptr);
-      }
 
       this.resolvePtr(target.__ptr);
       if (target.__ptr === 0) return undefined;
@@ -821,9 +946,14 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
     },
     ownKeys: (target) => {
       this.resolvePtr(target.__ptr);
-      const keys: string[] = [];
+      const keys: (string | symbol)[] = [];
       for (let i = 0; i < this.s_len; i++) keys.push(String(i));
       keys.push("length");
+
+      // [Node inspect compatibility] Include symbols from target so Node detects custom inspector
+      keys.push(
+        ...Reflect.ownKeys(target).filter((k) => typeof k === "symbol"),
+      );
       return keys;
     },
     getOwnPropertyDescriptor: (target, prop) => {
@@ -857,7 +987,8 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
         }
       }
 
-      return undefined;
+      // [Node inspect compatibility] Fallback to target for symbols (like inspect.custom)
+      return Reflect.getOwnPropertyDescriptor(target, prop);
     },
   };
 
