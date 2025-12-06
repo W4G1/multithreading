@@ -1,14 +1,19 @@
-<img width="180" height="153" alt="Logo" src="https://github.com/user-attachments/assets/e7750ae6-3acd-4c81-9417-3979f51535f3" />
+<div align="center">
+  <img width="150" height="128" alt="Logo" src="https://github.com/user-attachments/assets/e7750ae6-3acd-4c81-9417-3979f51535f3" />
 
-<br/>
-<br/>
+  <h1>Multithreading.js</h1>
 
-[![License](https://img.shields.io/github/license/W4G1/multithreading)](https://github.com/W4G1/multithreading/blob/main/LICENSE.md)
-[![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)](https://www.npmjs.com/package/multithreading)
-[![NPM version](https://img.shields.io/npm/v/multithreading)](https://www.npmjs.com/package/multithreading?activeTab=versions)
-[![GitHub Repo stars](https://img.shields.io/github/stars/W4G1/multithreading?logo=github&label=Star&labelColor=rgb(26%2C%2030%2C%2035)&color=rgb(13%2C%2017%2C%2023))](https://github.com/W4G1/multithreading)
+  <p>
+    <strong>Robust, Rust-inspired concurrency primitives for the JavaScript ecosystem.</strong>
+  </p>
 
-# Multithreading.js
+  [![License](https://img.shields.io/github/license/W4G1/multithreading)](https://github.com/W4G1/multithreading/blob/main/LICENSE.md)
+  [![Downloads](https://img.shields.io/npm/dw/multithreading?color=%238956FF)](https://www.npmjs.com/package/multithreading)
+  [![NPM version](https://img.shields.io/npm/v/multithreading)](https://www.npmjs.com/package/multithreading?activeTab=versions)
+  [![GitHub Repo stars](https://img.shields.io/github/stars/W4G1/multithreading?logo=github&label=Star&labelColor=rgb(26%2C%2030%2C%2035)&color=rgb(13%2C%2017%2C%2023))](https://github.com/W4G1/multithreading)
+</div>
+
+<br />
 
 **Multithreading** is a TypeScript library that brings robust, Rust-inspired concurrency primitives to the JavaScript ecosystem. It provides a thread-pool architecture, strict memory safety semantics, and synchronization primitives like Mutexes, Read-Write Locks, and Condition Variables.
 
@@ -61,7 +66,7 @@ Because Web Workers run in a completely isolated context, functions passed to `s
 
 To get data from your main thread into the worker, you have to use the `move()` function.
 
-The `move` function accepts variadic arguments. These arguments are passed to the worker function in the order they were provided. Despite the name, `move` handles data in two ways:
+The `move` function accepts a variable number of arguments. These arguments are passed to the worker function in the order they were provided. Despite the name, `move` handles data in two ways:
 
 1.  **Transferable Objects (e.g., `ArrayBuffer`, `Uint32Array`):** These are "moved" (zero-copy). Ownership transfers to the worker, and the original becomes unusable in the main thread.
 2.  **Non-Transferable Objects (e.g., JSON, numbers, strings):** These are cloned via structured cloning. They remain usable in the main thread.
@@ -76,7 +81,6 @@ const largeData = new Uint8Array(1024 * 1024 * 10); // 10MB
 // Will be cloned
 const metaData = { id: 1 };
 
-// We pass arguments as a comma-separated list.
 const handle = spawn(move(largeData, metaData), (data, meta) => {
   console.log("Processing ID:", meta.id);
   return data.byteLength;
@@ -87,12 +91,14 @@ await handle.join();
 
 -----
 
-## SharedJsonBuffer: Sharing Complex Objects
+## SharedJsonBuffer: Complex Objects in Shared Memory
 
-`SharedJsonBuffer` enables Mutex-protected shared memory for JSON objects, eliminating the overhead of `postMessage` data copying. Unlike standard buffers, it handles serialization automatically. It supports partial updates, re-serializing only changed bytes rather than the entire object tree for high-performance state synchronization.
+`SharedJsonBuffer` enables Mutex-protected shared memory for JSON objects, eliminating the overhead of `postMessage` data copying. It supports partial updates by utilizing [Proxies](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy) under the hood, reserializing only changed bytes rather than the entire object tree for high-performance state synchronization, especially with large JSON objects.
+
+**Note:** Initializing a `SharedJsonBuffer` has a performance cost. For single-use transfers, `SharedJsonBuffer` is slower than cloning. This data structure is optimized for large persistent shared state or objects that need to be passed around frequently between threads without repeated copying.
 
 ```typescript
-import { move, Mutex, SharedJsonBuffer, spawn } from "multithreading";
+import { spawn, move, Mutex, SharedJsonBuffer } from "multithreading";
 
 const sharedState = new Mutex(new SharedJsonBuffer({
   score: 0,
@@ -162,8 +168,7 @@ If you are using **Bun** (which doesn't natively support `using` and uses a tran
 ```typescript
 import { spawn, move, Mutex } from "multithreading";
 
-const buffer = new SharedArrayBuffer(4);
-const counterMutex = new Mutex(new Int32Array(buffer));
+const counterMutex = new Mutex(new Int32Array(new SharedArrayBuffer(4)));
 
 spawn(move(counterMutex), async (mutex) => {
   // Note that we have to import drop here, otherwise it wouldn't be available
@@ -266,7 +271,7 @@ spawn(move(mutex, cv), async (lock, cond) => {
   
   // Wait until value is not 0
   while (guard.value[0] === 0) {
-    // wait() unlocks the mutex, waits for notification, then re-locks.
+    // wait() unlocks the mutex, waits for notification, then re-locks
     await cond.wait(guard);
   }
   
@@ -302,16 +307,17 @@ spawn(move(tx), async (sender) => {
   await sender.send({ hello: "world" });
   await sender.send({ hello: "multithreading" });
   // Sender is destroyed here, automatically closing the channel
+  // because the last `tx` goes out of scope here.
 });
 
 // Consumer Thread
-spawn(move(rx.clone()), async (rx) => {
-  for await (const value of rx) {
+spawn(move(rx.clone()), async (receiver) => {
+  for await (const value of receiver) {
     console.log(value); // { hello: "world" }
   }
 });
 
-// Because we cloned rx, we can also receive on the main thread 
+// Because we cloned rx, the main thread also still has a handle
 for await (const value of rx) {
   console.log(value); // { hello: "world" }
 }
@@ -319,12 +325,12 @@ for await (const value of rx) {
 
 ## Importing Modules in Workers
 
-One of the most difficult aspects of Web Workers is handling imports. This library handles this automatically, enabling you to use dynamic `await import()` calls inside your spawned functions.
+This library simplifies module loading within Web Workers by supporting standard dynamic `await import()` calls. It automatically handles path resolution, allowing you to import dependencies relative to the file calling `spawn`, rather than the worker's internal location.
 
 You can import:
 
-1.  **External Libraries:** Packages from npm/CDN (depending on environment).
-2.  **Relative Files:** Files relative to the file calling `spawn`.
+1.  **External Libraries:** Packages from npm or CDNs (depending on your environment).
+2.  **Relative Files:** Local modules relative to the file where `spawn` is executed.
 
 **Note:** The function passed to `spawn` must be self-contained or explicitly import what it needs. It cannot access variables from the outer scope unless they are passed via `move()`.
 
@@ -342,17 +348,46 @@ Assume you have a file structure:
 import { spawn } from "multithreading";
 
 spawn(async () => {
-  // 1. Importing a relative file
-  // This path is relative to 'main.ts' (the caller location)
+  // Importing relative files
   const utils = await import("./utils.ts");
-  // 2. Importing an external library (e.g., from a URL or node_modules resolution)
-  const _ = await import("lodash");
+  // Importing external libraries
+  const { default: _ } = await import("lodash");
 
   console.log("Magic number from relative file:", utils.magicNumber);
-  console.log("Random number via lodash:", _.default.random(1, 100));
+  console.log("Random number via lodash:", _.random(1, 100));
   
   return utils.magicNumber;
 });
+```
+
+-----
+
+## Browser Compatibility
+
+This library relies on `SharedArrayBuffer` to implement shared memory primitives. Modern browsers require pages to be **Cross-Origin Isolated** to access this API securely.
+
+You must configure your web server to serve the application with the following HTTP headers:
+
+```http
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Failure to configure these headers will result in a runtime error indicating that `SharedArrayBuffer` is not defined.
+
+**Development Environments**
+If you are using a local development server (e.g., Vite, Webpack Dev Server, or Next.js), you must explicitly configure the server settings to send these headers during local development.
+
+## Content Security Policy (CSP)
+
+This library utilizes dynamic imports via `data:` URLs to generate worker entry points on the fly without requiring separate physical files.
+
+If your application uses a Content Security Policy (CSP), you must ensure that your `script-src` and `worker-src` directives allow the `data:` scheme.
+
+**Required CSP Headers:**
+
+```http
+Content-Security-Policy: script-src 'self' data:; worker-src 'self' data:;
 ```
 
 -----
@@ -362,13 +397,13 @@ spawn(async () => {
 ### Runtime
 
   * **`spawn(fn)`**: Runs a function in a worker.
-  * **`spawn(move(arg1, arg2, ...), fn)`**: Runs a function in a worker with specific arguments transferred or copied.
+  * **`spawn(move(arg1, arg2, ...), fn)`**: Runs a function in a worker with specific arguments transferred or cloned.
   * **`initRuntime(config)`**: Initializes the thread pool (optional, lazy loaded by default).
   * **`shutdown()`**: Terminates all workers in the pool.
 
 ### Memory Management
 
-  * **`move(...args)`**: Marks arguments for transfer (ownership move) rather than structured clone. Accepts a variable number of arguments which map to the arguments of the worker function.
+  * **`move(...args)`**: Marks arguments for transfer (ownership move) or clone, depending on the data type. Accepts a variable number of arguments which map to the arguments of the worker function.
   * **`drop(resource)`**: Explicitly disposes of a resource (calls `[Symbol.dispose]`). This is required for manual lock management in environments like Bun.
   * **`SharedJsonBuffer`**: A class for storing JSON objects in shared memory.
 
