@@ -7,8 +7,7 @@ import {
 
 export type Proxyable = Record<string | symbol, any> | any[];
 
-const IS_SHARED_JSON_BUFFER = Symbol.for("SharedJsonBuffer.IsProxy");
-const CONSOLE_LOG_PATCHED = Symbol.for("SharedJsonBuffer.ConsoleLogPatched");
+const CONSOLE_VIEW = Symbol.for("SharedJsonBuffer.consoleView");
 
 const OFFSET_FREE_PTR = 0;
 const OFFSET_ROOT = 8; // 8-byte aligned
@@ -32,62 +31,50 @@ interface StackRoot {
   type: number;
 }
 
-function enableDevTools() {
+function initConsoleHooks() {
   if (typeof console === "undefined") return;
 
-  const methods = ["log", "warn", "error", "dir", "table"] as const;
+  const methods = [
+    "log",
+    "info",
+    "warn",
+    "error",
+    "dir",
+    "table",
+    "debug",
+    "trace",
+  ] as const;
 
-  methods.forEach((method) => {
+  for (const method of methods) {
     const original = console[method];
 
-    // Prevent Double Wrapping
-    // If we have already tagged this function as 'patched', skip it.
-    if ((original as any)[CONSOLE_LOG_PATCHED]) return;
-
-    const interceptor = function (this: any, ...args: any[]) {
-      let hasShared = false;
-      const transformed: any[] = [];
-
-      for (const arg of args) {
-        if (arg && typeof arg === "object" && arg[IS_SHARED_JSON_BUFFER]) {
-          hasShared = true;
-          transformed.push(arg.toJSON ? arg.toJSON() : arg);
-        } else {
-          transformed.push(arg);
+    console[method] = function (this, ...args) {
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        // Check if it's our object and has the specific console view method
+        if (
+          arg && typeof arg === "object" &&
+          typeof arg[CONSOLE_VIEW] === "function"
+        ) {
+          try {
+            // We access the hidden method via the Proxy trap
+            args[i] = arg[CONSOLE_VIEW]();
+          } catch (e) {
+            // Fallback if something goes wrong
+            args[i] = arg;
+          }
         }
-      }
-
-      if (hasShared) {
-        return original.apply(this, [
-          "%c[snapshot]",
-          "color: grey",
-          ...transformed,
-        ]);
       }
 
       return original.apply(this, args);
     };
-
-    Object.keys(original).forEach((prop) => {
-      Object.defineProperty(interceptor, prop, {
-        value: (original as any)[prop],
-        enumerable: true,
-        writable: true,
-        configurable: true,
-      });
-    });
-
-    (interceptor as any)[CONSOLE_LOG_PATCHED] = true;
-
-    console[method] = interceptor as any;
-  });
+  }
 }
 
 class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
   static {
+    initConsoleHooks();
     register(this);
-    // Initialize console hooks immediately
-    enableDevTools();
   }
 
   // Views
@@ -199,8 +186,6 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
     Atomics.store(this._u32, idx, alignedNext);
     return currentPtr;
   }
-
-  // --- OPTIMIZED GC ---
 
   private collectGarbage() {
     const tempBuffer = new ArrayBuffer(this.buffer.byteLength);
@@ -509,8 +494,10 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
   public objectHandler: ProxyHandler<any> = {
     get: (target, prop, receiver) => {
-      if (prop === IS_SHARED_JSON_BUFFER) return true;
       if (typeof prop === "symbol") {
+        if (prop === CONSOLE_VIEW) {
+          return () => this.toConsoleView(target.__ptr);
+        }
         if (prop === toSerialized) return () => this[toSerialized]();
         if (prop === Symbol.iterator) return undefined;
         return Reflect.get(target, prop, receiver);
@@ -675,15 +662,72 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
     return proxy;
   }
 
+  public toConsoleView(ptr: number, depth = 0): any {
+    this.resolvePtr(ptr);
+    const len = this.s_len;
+    const start = this.s_start;
+    const type = this._u32[this.s_ptr >> 2]!;
+
+    const result: any = type === TYPE_ARRAY ? new Array(len) : {};
+
+    // Config: How much to show eagerly?
+    const EAGER_DEPTH = 5; // Show root +4 nested levels
+    const EAGER_BREADTH = 100; // Only show first 100 items of arrays (default in Node and Deno)
+
+    for (let i = 0; i < len; i++) {
+      let key: string | number;
+      let offset: number;
+
+      if (type === TYPE_ARRAY) {
+        key = i;
+        offset = start + i * 8;
+      } else {
+        const entryOffset = start + i * 12;
+        const keyPtr = this._u32[entryOffset >> 2]!;
+        key = this.readString(keyPtr);
+        offset = entryOffset + 4;
+      }
+
+      const itemType = this._u32[offset >> 2]!;
+      const itemPayload = this._u32[(offset + 4) >> 2]!;
+
+      if (itemType === TYPE_OBJECT || itemType === TYPE_ARRAY) {
+        // Eager vs lazy decision
+        // We eagerly decode if:
+        // 1. We haven't hit the depth limit and
+        // 2. We haven't hit the breadth limit
+        const isEager = depth < EAGER_DEPTH && i < EAGER_BREADTH;
+
+        if (isEager) {
+          result[key] = this.toConsoleView(itemPayload, depth + 1);
+        } else {
+          // Lazy Getter: When clicked, restart with depth 0 so the user sees the content
+          Object.defineProperty(result, key, {
+            enumerable: true,
+            configurable: true,
+            get: () => {
+              return this.toConsoleView(itemPayload, 0);
+            },
+          });
+        }
+      } else {
+        result[key] = this.readSlot(offset);
+      }
+    }
+
+    return result;
+  }
+
   public toJSON(ptr: number): any {
     this.resolvePtr(ptr);
+    const len = this.s_len;
+    const start = this.s_start;
     const type = this._u32[this.s_ptr >> 2]!;
 
     if (type === TYPE_ARRAY) {
-      const arr = new Array(this.s_len);
-      for (let i = 0; i < this.s_len; i++) {
-        // Read directly to create deep snapshot
-        const offset = this.s_start + i * 8;
+      const arr = new Array(len);
+      for (let i = 0; i < len; i++) {
+        const offset = start + i * 8;
         const itemType = this._u32[offset >> 2]!;
         const itemPayload = this._u32[(offset + 4) >> 2]!;
 
@@ -696,8 +740,8 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
       return arr;
     } else {
       const obj: any = {};
-      for (let i = 0; i < this.s_len; i++) {
-        const entryOffset = this.s_start + i * 12;
+      for (let i = 0; i < len; i++) {
+        const entryOffset = start + i * 12;
         const keyPtr = this._u32[entryOffset >> 2]!;
         const key = this.readString(keyPtr);
 
@@ -845,7 +889,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
   private arrayHandler: ProxyHandler<any> = {
     get: (target, prop, receiver) => {
-      if (prop === IS_SHARED_JSON_BUFFER) return true;
+      if (prop === CONSOLE_VIEW) return () => this.toConsoleView(target.__ptr);
       if (prop === toSerialized) return () => this[toSerialized]();
       if (prop === "__ptr") return target.__ptr;
       if (prop === "toJSON") return () => this.toJSON(target.__ptr);
