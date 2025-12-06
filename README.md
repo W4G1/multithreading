@@ -381,9 +381,9 @@ If these headers are missing, basic threading will work, but attempting to use s
 
 ### Content Security Policy (CSP)
 
-This library utilizes dynamic imports via `data:` URLs to generate worker entry points without requiring separate files.
+This library utilizes dynamic imports via `data:` URLs and generates worker entry points via `blob:` URLs.
 
-If your application uses a Content Security Policy (CSP), you must ensure that your `script-src` and `worker-src` directives allow the `data:` scheme.
+If your application uses a Content Security Policy (CSP), you must ensure that your `script-src` directive allows the `data:` scheme and your `worker-src` directive allows the `blob:` scheme.
 
 **Required CSP Headers:**
 
