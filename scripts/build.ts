@@ -158,6 +158,7 @@ const packageJson = {
   bugs: {
     url: "https://github.com/W4G1/multithreading/issues",
   },
+  type: "module",
   module: "./esm/lib.js",
   exports: {
     ".": {

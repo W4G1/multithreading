@@ -1,5 +1,5 @@
 <div align="center">
-  <img width="150" height="128" alt="Logo" src="https://github.com/user-attachments/assets/e7750ae6-3acd-4c81-9417-3979f51535f3" />
+  <img width="140" height="119" alt="Logo" src="https://github.com/user-attachments/assets/e7750ae6-3acd-4c81-9417-3979f51535f3" />
 
   <h1>Multithreading.js</h1>
 
@@ -97,7 +97,7 @@ await handle.join();
 
 `SharedJsonBuffer` enables Mutex-protected shared memory for JSON objects, eliminating the overhead of `postMessage` data copying. It supports partial updates by utilizing [Proxies](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy) under the hood, reserializing only changed bytes rather than the entire object tree for high-performance state synchronization, especially with large JSON objects.
 
-**Note:** Initializing a `SharedJsonBuffer` has a performance cost. For single-use transfers, `SharedJsonBuffer` is slower than cloning. This data structure is optimized for large persistent shared state or objects that need to be passed around frequently between threads without repeated copying.
+**Note:** Initializing a `SharedJsonBuffer` has a performance cost. For single-use transfers, `SharedJsonBuffer` is slower than cloning. This data structure is optimized for large persistent shared state or objects that need to be passed around frequently between threads.
 
 ```typescript
 import { spawn, move, Mutex, SharedJsonBuffer } from "multithreading";
@@ -145,7 +145,7 @@ A `Mutex` ensures that only one thread can access a specific piece of data at a 
 
 #### Option A: Automatic Management (Recommended)
 
-This library leverages the [Explicit Resource Management](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/using) proposal (`using` keyword). When you acquire a lock, it returns a guard. When that guard goes out of scope, the lock is automatically released.
+This library has support for the [Explicit Resource Management](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/using) proposal (`using` keyword). When you acquire a lock, it returns a guard. When that guard goes out of scope, the lock is automatically released.
 
 ```typescript
 import { spawn, move, Mutex } from "multithreading";
@@ -154,12 +154,12 @@ const buffer = new SharedArrayBuffer(4);
 const counterMutex = new Mutex(new Int32Array(buffer));
 
 spawn(move(counterMutex), async (mutex) => {
-  // 'using' automatically calls dispose() at the end of the scope
+  // 'using' automatically disposes the lock at the end of the scope
   using guard = await mutex.acquire();
   
   guard.value[0]++;
   
-  // End of scope: Lock is automatically released here
+  // End of scope: Lock is released here
 });
 ```
 
