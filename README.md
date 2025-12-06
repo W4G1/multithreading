@@ -76,7 +76,7 @@ The `move` function accepts a variable number of arguments. These arguments are 
 ```typescript
 import { spawn, move } from "multithreading";
 
-// Will be transfered
+// Will be transferred
 const largeData = new Uint8Array(1024 * 1024 * 10); // 10MB
 // Will be cloned
 const metaData = { id: 1 };
@@ -381,14 +381,14 @@ If these headers are missing, basic threading will work, but attempting to use s
 
 ### Content Security Policy (CSP)
 
-This library utilizes dynamic imports via `data:` URLs to generate worker entry points on the fly without requiring separate physical files.
+This library utilizes dynamic imports via `data:` URLs to generate worker entry points without requiring separate files.
 
 If your application uses a Content Security Policy (CSP), you must ensure that your `script-src` and `worker-src` directives allow the `data:` scheme.
 
 **Required CSP Headers:**
 
 ```http
-Content-Security-Policy: script-src 'self' data:; worker-src 'self' data:;
+Content-Security-Policy: default-src 'self'; worker-src 'self' blob:; script-src 'self' data: https:;
 ```
 
 -----
