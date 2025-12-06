@@ -8,6 +8,7 @@ import {
 export type Proxyable = Record<string | symbol, any> | any[];
 
 const IS_SHARED_JSON_BUFFER = Symbol.for("SharedJsonBuffer.IsProxy");
+const CONSOLE_LOG_PATCHED = Symbol.for("SharedJsonBuffer.ConsoleLogPatched");
 
 const OFFSET_FREE_PTR = 0;
 const OFFSET_ROOT = 8; // 8-byte aligned
@@ -39,7 +40,11 @@ function enableDevTools() {
   methods.forEach((method) => {
     const original = console[method];
 
-    console[method] = (...args: any[]) => {
+    // Prevent Double Wrapping
+    // If we have already tagged this function as 'patched', skip it.
+    if ((original as any)[CONSOLE_LOG_PATCHED]) return;
+
+    const interceptor = function (this: any, ...args: any[]) {
       let hasShared = false;
       const transformed: any[] = [];
 
@@ -53,17 +58,28 @@ function enableDevTools() {
       }
 
       if (hasShared) {
-        // @ts-ignore Ignore types
-        return void original.call(
-          console,
+        return original.apply(this, [
           "%c[snapshot]",
           "color: grey",
           ...transformed,
-        );
+        ]);
       }
 
-      return original.apply(console, args);
+      return original.apply(this, args);
     };
+
+    Object.keys(original).forEach((prop) => {
+      Object.defineProperty(interceptor, prop, {
+        value: (original as any)[prop],
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    (interceptor as any)[CONSOLE_LOG_PATCHED] = true;
+
+    console[method] = interceptor as any;
   });
 }
 
