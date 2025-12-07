@@ -1,4 +1,3 @@
-import { assertEquals } from "@std/assert";
 import { move, Mutex, spawn } from "../lib/lib.ts";
 
 Deno.test("Mutex async", async () => {
@@ -9,8 +8,6 @@ Deno.test("Mutex async", async () => {
   const handle1 = spawn(move(mutex), async (lock) => {
     using _guard = await lock.acquire();
 
-    console.log("Handle1 has lock");
-
     await new Promise((r) => setTimeout(r, 500));
   });
 
@@ -18,8 +15,6 @@ Deno.test("Mutex async", async () => {
 
   const handle2 = spawn(move(mutex), async (lock) => {
     using _guard = await lock.acquire();
-
-    console.log("Handle2 has lock");
   });
 
   await Promise.all([handle1.join(), handle2.join()]);

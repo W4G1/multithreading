@@ -48,7 +48,7 @@ function initConsoleHooks() {
   for (const method of methods) {
     const original = console[method];
 
-    console[method] = function (this, ...args) {
+    console[method] = function (this: any, ...args: any[]) {
       for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         // Check if it's our object and has the specific console view method
@@ -544,9 +544,61 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
       return undefined;
     },
 
+    has: (target, prop) => {
+      if (typeof prop === "symbol") {
+        if (prop === CONSOLE_VIEW || prop === toSerialized) return true;
+        return Reflect.has(target, prop);
+      }
+      if (prop === "__ptr" || prop === "toJSON") return true;
+
+      this.resolvePtr(target.__ptr);
+      if (target.__ptr === 0) return false;
+
+      const propStr = String(prop);
+      const count = this.s_len;
+      const start = this.s_start;
+
+      // Check hint
+      const hint = this.propertyHints.get(propStr);
+      if (hint !== undefined && hint < count) {
+        const entryOffset = start + hint * 12;
+        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyStr = this.readString(keyPtr);
+        if (keyStr === propStr) return true;
+      }
+
+      // Scan
+      for (let i = 0; i < count; i++) {
+        const entryOffset = start + i * 12;
+        const keyPtr = this._u32[entryOffset >> 2]!;
+        const key = this.readString(keyPtr);
+
+        if (key === propStr) {
+          this.propertyHints.set(propStr, i);
+          return true;
+        }
+      }
+      return false;
+    },
+
     set: (target, prop, value) => {
       if (typeof prop === "symbol") return false;
       this.objectSet(target, String(prop), value);
+      return true;
+    },
+
+    defineProperty: (target, prop, descriptor) => {
+      if (typeof prop === "symbol") return false;
+
+      if (descriptor.get || descriptor.set) {
+        throw new Error("SharedJsonBuffer cannot store accessors (get/set)");
+      }
+
+      if ("value" in descriptor) {
+        this.objectSet(target, String(prop), descriptor.value);
+      }
+
+      // We ignore enumerable/configurable/writable.
       return true;
     },
 
@@ -592,7 +644,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
         const keyStr = this.readString(keyPtr);
 
         if (keyStr === propStr) {
-          // SAFE: We just called resolvePtr, so we can read the value now
+          // We just called resolvePtr, so we can read the value now
           const val = this.readSlot(entryOffset + 4);
           return {
             enumerable: true,
@@ -611,7 +663,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
         if (key === propStr) {
           this.propertyHints.set(propStr, i);
-          // SAFE: We just called resolvePtr, so we can read the value now
+          // We just called resolvePtr, so we can read the value now
           const val = this.readSlot(entryOffset + 4);
           return {
             enumerable: true,
@@ -887,6 +939,129 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
     }
   }
 
+  // --- Array Methods Support ---
+
+  private arrayEnsureCapacity(target: Pointer, minCap: number) {
+    this.resolvePtr(target.__ptr);
+    if (this.s_cap >= minCap) return;
+
+    const oldCap = this.s_cap;
+    const oldLen = this.s_len;
+    const oldDataStart = this.s_start;
+
+    const newCap = Math.max(oldCap * 2, minCap);
+    const newByteSize = 12 + newCap * 8;
+
+    const newPtr = this.alloc(newByteSize);
+
+    // Re-resolve after alloc
+    this.resolvePtr(target.__ptr);
+
+    const idx = newPtr >> 2;
+    this._u32[idx] = TYPE_ARRAY;
+    this._u32[idx + 1] = newCap;
+    this._u32[idx + 2] = oldLen;
+
+    // Copy existing data
+    this._u8.set(
+      this._u8.subarray(oldDataStart, oldDataStart + oldLen * 8),
+      newPtr + 12,
+    );
+
+    // Mark old as moved
+    const pIdx = this.s_ptr >> 2;
+    this._u32[pIdx] = TYPE_MOVED;
+    this._u32[pIdx + 1] = newPtr;
+
+    this.resolvePtr(target.__ptr);
+  }
+
+  private arraySpliceImpl(
+    target: Pointer,
+    start: number,
+    deleteCount: number,
+    items: any[] = [],
+  ): any[] {
+    this.resolvePtr(target.__ptr);
+    const len = this.s_len;
+    const actualStart = start < 0
+      ? Math.max(len + start, 0)
+      : Math.min(start, len);
+    const actualDeleteCount = Math.min(
+      Math.max(deleteCount, 0),
+      len - actualStart,
+    );
+
+    // 1. Read deleted items to return
+    const deletedItems: any[] = [];
+    for (let i = 0; i < actualDeleteCount; i++) {
+      const offset = this.s_start + (actualStart + i) * 8;
+      deletedItems.push(this.readSlot(offset));
+    }
+
+    const insertCount = items.length;
+    const delta = insertCount - actualDeleteCount;
+    const newLen = len + delta;
+
+    // 2. Ensure Capacity (Allocates new buffer if needed)
+    this.arrayEnsureCapacity(target, newLen);
+    // After this, this.s_start, s_ptr, s_cap are updated to potentially new location
+
+    // 3. Move Memory (Shift tail)
+    if (delta !== 0) {
+      const tailCount = len - (actualStart + actualDeleteCount);
+      const srcIdx = actualStart + actualDeleteCount;
+      const destIdx = actualStart + insertCount;
+
+      const srcOffset = this.s_start + srcIdx * 8;
+      const destOffset = this.s_start + destIdx * 8;
+      const byteLen = tailCount * 8;
+
+      this._u8.copyWithin(destOffset, srcOffset, srcOffset + byteLen);
+    }
+
+    // 4. Insert Items
+    for (let i = 0; i < insertCount; i++) {
+      const val = items[i];
+      const valResult = this.writeValue(val);
+      const valHandle = { __ptr: valResult.payload };
+      const isValPtr = valResult.type >= TYPE_NUMBER;
+
+      if (isValPtr) {
+        this.tempRoots.push({ handle: valHandle, type: valResult.type });
+      }
+
+      this.resolvePtr(target.__ptr);
+      const offset = this.s_start + (actualStart + i) * 8;
+      const oIdx = offset >> 2;
+      this._u32[oIdx] = valResult.type;
+      this._u32[oIdx + 1] = valHandle.__ptr;
+
+      if (isValPtr) this.tempRoots.pop();
+    }
+
+    // 5. Update Length
+    this._u32[(this.s_ptr + 8) >> 2] = newLen;
+    this.s_len = newLen;
+
+    return deletedItems;
+  }
+
+  /**
+   * Helper to create a shallow JS Array containing Proxies or primitives
+   * derived from the underlying buffer.
+   */
+  private toArrayShallow(ptr: number): any[] {
+    this.resolvePtr(ptr);
+    const len = this.s_len;
+    const start = this.s_start;
+    const result = new Array(len);
+    for (let i = 0; i < len; i++) {
+      result[i] = this.readSlot(start + i * 8);
+    }
+    return result;
+  }
+
   private arrayHandler: ProxyHandler<any> = {
     get: (target, prop, receiver) => {
       if (prop === CONSOLE_VIEW) return () => this.toConsoleView(target.__ptr);
@@ -902,6 +1077,123 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
       if (prop === "length") return this.s_len;
 
+      // 1. Map common mutators to splice (efficient, no array copy)
+      if (prop === "push") {
+        return (...args: any[]) => {
+          this.arraySpliceImpl(target, this.s_len, 0, args);
+          return this.s_len;
+        };
+      }
+      if (prop === "pop") {
+        return () => {
+          if (this.s_len === 0) return undefined;
+          return this.arraySpliceImpl(target, this.s_len - 1, 1)[0];
+        };
+      }
+      if (prop === "shift") {
+        return () => {
+          if (this.s_len === 0) return undefined;
+          return this.arraySpliceImpl(target, 0, 1)[0];
+        };
+      }
+      if (prop === "unshift") {
+        return (...args: any[]) => {
+          this.arraySpliceImpl(target, 0, 0, args);
+          return this.s_len;
+        };
+      }
+      if (prop === "splice") {
+        return (start: number, deleteCount?: number, ...items: any[]) => {
+          const len = this.s_len;
+          const actualStart = start < 0 ? len + start : start;
+          const maxDel = len - (actualStart < 0 ? 0 : actualStart);
+          const actualDel = deleteCount === undefined
+            ? maxDel
+            : Math.min(Math.max(deleteCount, 0), maxDel);
+          return this.arraySpliceImpl(target, actualStart, actualDel, items);
+        };
+      }
+
+      // 2. Explicit ES2019 Flattening Methods
+      if (prop === "flat") {
+        return (depth: number = 1) => {
+          const result: any[] = [];
+
+          const flatten = (ptr: number, currentDepth: number) => {
+            this.resolvePtr(ptr);
+            const len = this.s_len;
+            const start = this.s_start;
+            // Capture start offset so loop is safe even if recursing changes s_ptr
+            const captureStart = start;
+
+            for (let i = 0; i < len; i++) {
+              const offset = captureStart + i * 8;
+              const type = this._u32[offset >> 2]!;
+              const payload = this._u32[(offset + 4) >> 2]!;
+
+              if (type === TYPE_ARRAY && currentDepth > 0) {
+                flatten(payload, currentDepth - 1);
+              } else {
+                result.push(this.readSlot(offset));
+              }
+            }
+          };
+
+          flatten(target.__ptr, Math.floor(depth));
+          return result;
+        };
+      }
+
+      if (prop === "flatMap") {
+        return (
+          callback: (value: any, index: number, array: any[]) => any,
+          thisArg?: any,
+        ) => {
+          const len = this.s_len;
+          const start = this.s_start;
+          const result: any[] = [];
+
+          for (let i = 0; i < len; i++) {
+            // Read value (resolves proxies if needed)
+            const val = this.readSlot(start + i * 8);
+            const mapped = callback.call(thisArg, val, i, receiver);
+
+            if (Array.isArray(mapped)) {
+              result.push(...mapped);
+            } else {
+              result.push(mapped);
+            }
+          }
+          return result;
+        };
+      }
+
+      // 3. Map in-place mutators via temporary array (Sort, Reverse, Fill, CopyWithin)
+      if (
+        typeof prop === "string" &&
+        ["sort", "reverse", "fill", "copyWithin"].includes(prop)
+      ) {
+        return (...args: any[]) => {
+          const arr = this.toArrayShallow(target.__ptr);
+          (arr as any)[prop](...args);
+          // Write back changes
+          arr.forEach((v, i) => this.arraySet(target, i, v));
+          return receiver;
+        };
+      }
+
+      // 4. Fallback: Map all other read-only Array methods (map, filter, reduce, slice, join, etc.)
+      if (typeof prop === "string" && prop in Array.prototype) {
+        const nativeMethod = (Array.prototype as any)[prop];
+        if (typeof nativeMethod === "function") {
+          return (...args: any[]) => {
+            const arr = this.toArrayShallow(target.__ptr);
+            return nativeMethod.apply(arr, args);
+          };
+        }
+      }
+
+      // 5. Index Access
       if (typeof prop === "string") {
         const idx = Number(prop);
         if (!isNaN(idx)) {
@@ -910,28 +1202,25 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
         }
       }
 
-      if (prop === "push") {
-        return (...args: any[]) => {
-          const currentLen = this.s_len;
-          args.forEach((a, i) => this.arraySet(target, currentLen + i, a));
-          return currentLen + args.length;
-        };
-      }
-
-      if (prop === "pop") {
-        return () => {
-          this.resolvePtr(target.__ptr);
-          const len = this.s_len;
-          if (len === 0) return undefined;
-          const lastVal = this.readSlot(this.s_start + (len - 1) * 8);
-          this._u32[(this.s_ptr + 8) >> 2] = len - 1;
-          return lastVal;
-        };
-      }
       return Reflect.get(target, prop, receiver);
     },
     set: (target, prop, value) => {
-      if (prop === "length") return false;
+      if (prop === "length") {
+        const newLen = Number(value);
+        if (!isNaN(newLen) && newLen >= 0) {
+          this.resolvePtr(target.__ptr);
+          const currentLen = this.s_len;
+          if (newLen < currentLen) {
+            this.arraySpliceImpl(target, newLen, currentLen - newLen);
+          } else if (newLen > currentLen) {
+            this.arrayEnsureCapacity(target, newLen);
+            this._u32[(this.s_ptr + 8) >> 2] = newLen;
+          }
+          return true;
+        }
+        return false;
+      }
+
       const idx = Number(prop);
       if (!isNaN(idx)) {
         this.arraySet(target, idx, value);
@@ -959,15 +1248,9 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
       const idx = Number(prop);
       if (!isNaN(idx)) {
-        // 1. Reset state to THIS array
         this.resolvePtr(target.__ptr);
-
-        // 2. Check bounds
         if (idx >= 0 && idx < this.s_len) {
-          // 3. Read Value
-          // Because we called resolvePtr right above, this.s_start is correct.
           const val = this.readSlot(this.s_start + idx * 8);
-
           return {
             value: val,
             enumerable: true,

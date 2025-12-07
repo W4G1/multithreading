@@ -50,9 +50,6 @@ Deno.test("MPMC - Multiple Consumers (Load Balancing)", async () => {
   assertEquals(allReceived[0], 0);
   assertEquals(allReceived[49], 49);
 
-  // Verify distribution
-  console.log(`Worker A: ${resA.value.length}, Worker B: ${resB.value.length}`);
-
   assert(resA.value.length > 0, "Worker A did no work");
   assert(resB.value.length > 0, "Worker B did no work");
 });

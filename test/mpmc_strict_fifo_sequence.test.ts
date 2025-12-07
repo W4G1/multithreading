@@ -22,4 +22,7 @@ Deno.test("MPMC - Strict FIFO Sequence (Single Producer -> Single Consumer)", as
     );
     nextExpected++;
   }
+
+  // Allow enough time for any timers to clean up
+  await new Promise((r) => setTimeout(r, 50));
 });
