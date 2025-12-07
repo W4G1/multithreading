@@ -12,10 +12,10 @@ export const INTERNAL_MUTEX_CONTROLLER = Symbol(
   "Thread.InternalMutexController",
 );
 
-// Defines the capabilities usually hidden from the user
+// Defines the capabilities hidden from the user but available to the Guard and Condvar
 export interface MutexController {
   unlock(): void;
-  lockSync(): void;
+  blockingLock(): void;
   lock(): Promise<void>;
 }
 const LOCKED = 1;
@@ -55,6 +55,10 @@ export class MutexGuard<T extends SharedMemoryView | void> {
       this.#released = true;
     }
   }
+
+  dispose() {
+    return this[Symbol.dispose]();
+  }
 }
 
 export class Mutex<T extends SharedMemoryView | void = void>
@@ -83,7 +87,7 @@ export class Mutex<T extends SharedMemoryView | void = void>
     );
   }
 
-  #lockSync(): void {
+  #blockingLock(): void {
     while (true) {
       if (this.#tryLock()) return;
       Atomics.wait(this.#lockState, 0, LOCKED);
@@ -115,28 +119,19 @@ export class Mutex<T extends SharedMemoryView | void = void>
   #createController(): MutexController {
     return {
       unlock: () => this.#unlock(),
-      lockSync: () => this.#lockSync(),
+      blockingLock: () => this.#blockingLock(),
       lock: () => this.#lock(),
     };
   }
 
-  public acquireSync(): MutexGuard<T> {
-    this.#lockSync();
+  public blockingLock(): MutexGuard<T> {
+    this.#blockingLock();
     return new MutexGuard(this.#data, this.#createController());
   }
 
-  public async acquire(): Promise<MutexGuard<T>> {
+  public async lock(): Promise<MutexGuard<T>> {
     await this.#lock();
     return new MutexGuard(this.#data, this.#createController());
-  }
-
-  public sync<R>(fn: (data: T) => R): R {
-    this.#lockSync();
-    try {
-      return fn(this.#data);
-    } finally {
-      this.#unlock();
-    }
   }
 
   [toSerialized]() {

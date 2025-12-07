@@ -7,14 +7,14 @@ Deno.test("Semaphore Multi-Permit (Batch 'using')", async () => {
   const handle = spawn(move(sem), (s) => {
     {
       // Grab all 5 permits
-      using _guard = s.acquireSync(5);
+      using _guard = s.blockingAcquire(5);
       if (s.tryAcquire(1) !== null) {
         throw new Error("Should have exhausted permits");
       }
     } // Released 5 here
 
     // Should be free again
-    using _guard2 = s.acquireSync(5);
+    using _guard2 = s.blockingAcquire(5);
     return true;
   });
 

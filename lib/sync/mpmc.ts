@@ -7,7 +7,7 @@ import {
   toSerialized,
 } from "../shared.ts";
 import type { Result } from "../types.ts";
-import { Semaphore } from "./semaphore.ts";
+import { INTERNAL_SEMAPHORE_CONTROLLER, Semaphore } from "./semaphore.ts";
 import { SharedJsonBuffer } from "../json_buffer.ts";
 
 // --- Memory Layout Constants ---
@@ -126,11 +126,11 @@ export class Sender<T> implements Serializable, Disposable {
       throw err;
     }
 
-    itemsAvailable.release(1);
+    itemsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1);
     return { ok: true, value: undefined };
   }
 
-  sendSync(value: T): Result<void, Error> {
+  blockingSend(value: T): Result<void, Error> {
     if (this.disposed) {
       return { ok: false, error: new Error("Sender is disposed") };
     }
@@ -141,7 +141,7 @@ export class Sender<T> implements Serializable, Disposable {
       return { ok: false, error: new Error("Channel closed (No Receivers)") };
     }
 
-    const slotToken = slotsAvailable.acquireSync();
+    const slotToken = slotsAvailable.blockingAcquire();
 
     if (Atomics.load(state, CLOSED_IDX) === 1) {
       slotToken[Symbol.dispose]();
@@ -149,7 +149,7 @@ export class Sender<T> implements Serializable, Disposable {
     }
 
     try {
-      const lockToken = sendLock.acquireSync();
+      const lockToken = sendLock.blockingAcquire();
       try {
         if (Atomics.load(state, CLOSED_IDX) === 1) {
           slotToken[Symbol.dispose]();
@@ -163,7 +163,7 @@ export class Sender<T> implements Serializable, Disposable {
         lockToken[Symbol.dispose]();
       }
 
-      itemsAvailable.release(1);
+      itemsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1);
       return { ok: true, value: undefined };
     } catch (err) {
       slotToken[Symbol.dispose]();
@@ -179,14 +179,14 @@ export class Sender<T> implements Serializable, Disposable {
 
     if (Atomics.load(state, CLOSED_IDX) === 1) return;
 
-    const g1 = sendLock.acquireSync();
-    const g2 = recvLock.acquireSync();
+    const g1 = sendLock.blockingAcquire();
+    const g2 = recvLock.blockingAcquire();
 
     try {
       if (Atomics.load(state, CLOSED_IDX) === 1) return;
       Atomics.store(state, CLOSED_IDX, 1);
-      slotsAvailable.release(1_073_741_823);
-      itemsAvailable.release(1_073_741_823);
+      slotsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1_073_741_823);
+      itemsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1_073_741_823);
     } finally {
       g1[Symbol.dispose]();
       g2[Symbol.dispose]();
@@ -280,22 +280,22 @@ export class Receiver<T> implements Serializable, Disposable {
       throw err;
     }
 
-    slotsAvailable.release(1);
+    slotsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1);
     return { ok: true, value: val };
   }
 
-  recvSync(): Result<T, Error> {
+  blockingRecv(): Result<T, Error> {
     if (this.disposed) {
       return { ok: false, error: new Error("Receiver disposed") };
     }
     const { state, items, recvLock, itemsAvailable, slotsAvailable } =
       this.internals;
 
-    const itemToken = itemsAvailable.acquireSync();
+    const itemToken = itemsAvailable.blockingAcquire();
     let val: T;
 
     try {
-      const lockToken = recvLock.acquireSync();
+      const lockToken = recvLock.blockingAcquire();
       try {
         const head = state[HEAD_IDX]!;
         val = items[head] as T;
@@ -318,7 +318,7 @@ export class Receiver<T> implements Serializable, Disposable {
         lockToken[Symbol.dispose]();
       }
 
-      slotsAvailable.release(1);
+      slotsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1);
       return { ok: true, value: val };
     } catch (err) {
       itemToken[Symbol.dispose]();

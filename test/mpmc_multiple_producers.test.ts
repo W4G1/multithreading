@@ -24,6 +24,5 @@ Deno.test("MPMC - Multiple Producers (Clone & Contention)", async () => {
   // 20 * 1 + 20 * 2 = 20 + 40 = 60
   assertEquals(sum, 60);
 
-  // Allow enough time for any timers to clean up
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise((r) => setTimeout(r, 0));
 });

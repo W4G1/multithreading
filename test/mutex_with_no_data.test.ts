@@ -7,7 +7,7 @@ Deno.test("Mutex with No Data (void)", async () => {
 
   // 2. Spawn Worker
   const handle = spawn(move(mutex), (lock) => {
-    using guard = lock.acquireSync();
+    using guard = lock.blockingLock();
     // Guard.value should be undefined
     return guard.value;
   });

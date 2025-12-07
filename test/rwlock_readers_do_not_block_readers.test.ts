@@ -14,7 +14,7 @@ Deno.test("RwLock: Readers do not block Readers", async () => {
   const readerFn = (lock: RwLock<Uint8Array>) => {
     // Acquire read lock multiple times
     for (let i = 0; i < 10; i++) {
-      using guard = lock.readSync();
+      using guard = lock.blockingRead();
       if (guard.value[0] !== 128) {
         throw new Error("Data corruption detected during read");
       }

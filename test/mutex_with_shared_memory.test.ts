@@ -9,7 +9,7 @@ Deno.test("Mutex with Shared Memory (Int32Array)", async () => {
 
   // 2. Spawn Worker
   const handle = spawn(move(mutex), (lock) => {
-    using guard = lock.acquireSync();
+    using guard = lock.blockingLock();
     // Mutate the shared value
     guard.value[0] = 42;
     return guard.value[0];

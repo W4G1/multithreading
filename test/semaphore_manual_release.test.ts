@@ -12,21 +12,27 @@ Deno.test("Semaphore Manual Release (Bypassing 'using')", async () => {
     drop(guard); // Manual call
 
     // Check if free
-    if (!s.tryAcquire(1)) throw new Error("Manual dispose failed");
-    s.release(1); // Clean up the tryAcquire check
+
+    const maybeGuard = s.tryAcquire(1);
+
+    if (!maybeGuard) throw new Error("Manual dispose failed");
+    maybeGuard.dispose();
 
     // Test B: Raw release (ignoring the guard)
     // This simulates a scenario where you might want to release
     // without having the guard object handy, or bridging legacy code.
-    await s.acquire();
+    const guard2 = await s.acquire();
     // We intentionally drop the return value (the guard).
     // JS Garbage Collection does NOT trigger dispose, so the lock is held.
 
     // We manually release on the semaphore instance
-    s.release(1);
+    guard2[Symbol.dispose]();
 
     // Verify we are back to neutral
-    if (!s.tryAcquire(1)) throw new Error("Raw release failed");
+
+    const maybeGuard2 = s.tryAcquire(1);
+
+    if (!maybeGuard2) throw new Error("Raw release failed");
 
     return true;
   });

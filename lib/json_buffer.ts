@@ -1333,7 +1333,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
 
   [toSerialized]() {
     return {
-      value: { buffer: this.buffer },
+      value: this.buffer,
       transfer: [],
       className: SharedJsonBufferImpl.name,
     };
@@ -1344,7 +1344,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
       SharedJsonBufferImpl<any>[typeof toSerialized]
     >["value"],
   ) {
-    return new SharedJsonBufferImpl(null as any, data.buffer);
+    return new SharedJsonBufferImpl(null as any, data);
   }
 }
 

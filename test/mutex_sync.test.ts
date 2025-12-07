@@ -6,7 +6,7 @@ Deno.test("Mutex sync", async () => {
   const mutex = new Mutex(sharedInt);
 
   const handle1 = spawn(move(mutex), (lock) => {
-    using _guard = lock.acquireSync();
+    using _guard = lock.blockingLock();
 
     let i = 0;
 
@@ -19,7 +19,7 @@ Deno.test("Mutex sync", async () => {
   await new Promise((r) => setTimeout(r, 50));
 
   const handle2 = spawn(move(mutex), (lock) => {
-    using _guard = lock.acquireSync();
+    using _guard = lock.blockingLock();
   });
 
   await Promise.all([handle1.join(), handle2.join()]);

@@ -9,7 +9,7 @@ Deno.test("Semaphore Rate Limiting (Sync + 'using')", async () => {
 
   const task = async (s: Semaphore, counter: Int32Array) => {
     // Blocks here if 2 people are already inside
-    using _guard = s.acquireSync();
+    using _guard = s.blockingAcquire();
 
     // Increment "active" count
     const currentActive = Atomics.add(counter, 0, 1) + 1;

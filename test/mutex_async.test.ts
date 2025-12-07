@@ -6,7 +6,7 @@ Deno.test("Mutex async", async () => {
   const mutex = new Mutex(sharedInt);
 
   const handle1 = spawn(move(mutex), async (lock) => {
-    using _guard = await lock.acquire();
+    using _guard = await lock.lock();
 
     await new Promise((r) => setTimeout(r, 500));
   });
@@ -14,7 +14,7 @@ Deno.test("Mutex async", async () => {
   await new Promise((r) => setTimeout(r, 100));
 
   const handle2 = spawn(move(mutex), async (lock) => {
-    using _guard = await lock.acquire();
+    using _guard = await lock.lock();
   });
 
   await Promise.all([handle1.join(), handle2.join()]);

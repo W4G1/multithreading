@@ -8,18 +8,95 @@ import {
   toSerialized,
 } from "../shared.ts";
 
+export const INTERNAL_RWLOCK_CONTROLLER = Symbol(
+  "Thread.InternalRwLockController",
+);
+
+// Defines the capabilities hidden from the user but available to the Guard
+export interface RwLockController {
+  unlock(): void;
+}
+
 const UNLOCKED = 0;
 const WRITE_LOCKED = -1;
 const READ_ONE = 1;
 
-export interface RwLockReadGuard<T extends SharedMemoryView | void> {
-  value: T;
-  [Symbol.dispose](): void;
+/**
+ * Guard for Read access.
+ * Allows multiple simultaneous readers.
+ */
+export class RwLockReadGuard<T extends SharedMemoryView | void> {
+  #data: T;
+  #released = false;
+  [INTERNAL_RWLOCK_CONTROLLER]!: RwLockController;
+
+  constructor(data: T, controller: RwLockController) {
+    this.#data = data;
+    this.#released = false;
+
+    Object.defineProperty(this, INTERNAL_RWLOCK_CONTROLLER, {
+      value: controller,
+      writable: false,
+      enumerable: false,
+      configurable: false,
+    });
+  }
+
+  get value(): T {
+    if (this.#released) throw new Error("Cannot access released lock data");
+    return this.#data;
+  }
+
+  [Symbol.dispose]() {
+    if (!this.#released) {
+      const controller = this[INTERNAL_RWLOCK_CONTROLLER];
+      controller.unlock();
+      this.#released = true;
+    }
+  }
+
+  dispose() {
+    return this[Symbol.dispose]();
+  }
 }
 
-export interface RwLockWriteGuard<T extends SharedMemoryView | void> {
-  value: T;
-  [Symbol.dispose](): void;
+/**
+ * Guard for Write access.
+ * Ensures exclusive access.
+ */
+export class RwLockWriteGuard<T extends SharedMemoryView | void> {
+  #data: T;
+  #released = false;
+  [INTERNAL_RWLOCK_CONTROLLER]!: RwLockController;
+
+  constructor(data: T, controller: RwLockController) {
+    this.#data = data;
+    this.#released = false;
+
+    Object.defineProperty(this, INTERNAL_RWLOCK_CONTROLLER, {
+      value: controller,
+      writable: false,
+      enumerable: false,
+      configurable: false,
+    });
+  }
+
+  get value(): T {
+    if (this.#released) throw new Error("Cannot access released lock data");
+    return this.#data;
+  }
+
+  [Symbol.dispose]() {
+    if (!this.#released) {
+      const controller = this[INTERNAL_RWLOCK_CONTROLLER];
+      controller.unlock();
+      this.#released = true;
+    }
+  }
+
+  dispose() {
+    return this[Symbol.dispose]();
+  }
 }
 
 export class RwLock<T extends SharedMemoryView | void = void>
@@ -28,150 +105,159 @@ export class RwLock<T extends SharedMemoryView | void = void>
     register(this);
   }
 
-  private state: Int32Array<SharedArrayBuffer>;
-  private data: T;
+  #lockState: Int32Array<SharedArrayBuffer>;
+  #data: T;
 
   constructor(data?: T, _existingStateBuffer?: SharedArrayBuffer) {
-    this.data = data as T;
+    this.#data = data as T;
     if (_existingStateBuffer) {
-      this.state = new Int32Array(_existingStateBuffer);
+      this.#lockState = new Int32Array(_existingStateBuffer);
     } else {
-      this.state = new Int32Array(new SharedArrayBuffer(4));
+      this.#lockState = new Int32Array(new SharedArrayBuffer(4));
     }
   }
 
-  // --- Read Methods ---
+  /**
+   * Unlock logic for readers.
+   * Decrements count. If 0, notifies writers.
+   */
+  #unlockRead(): void {
+    const prevState = Atomics.sub(this.#lockState, 0, READ_ONE);
+    // If we were the last reader (prevState was 1, now 0), notify potential writers
+    if (prevState === READ_ONE) {
+      Atomics.notify(this.#lockState, 0, 1);
+    }
+  }
 
-  readSync(): RwLockReadGuard<T> {
+  /**
+   * Unlock logic for writers.
+   * Sets state to 0. Notifies all (readers or writers).
+   */
+  #unlockWrite(): void {
+    if (
+      Atomics.compareExchange(this.#lockState, 0, WRITE_LOCKED, UNLOCKED) !==
+        WRITE_LOCKED
+    ) {
+      throw new Error(
+        "RwLock was not write-locked or locked by another thread",
+      );
+    }
+    // Notify all waiting readers or one waiting writer
+    Atomics.notify(this.#lockState, 0, Infinity);
+  }
+
+  #createReadController(): RwLockController {
+    return {
+      unlock: () => this.#unlockRead(),
+    };
+  }
+
+  #createWriteController(): RwLockController {
+    return {
+      unlock: () => this.#unlockWrite(),
+    };
+  }
+
+  public blockingRead(): RwLockReadGuard<T> {
     while (true) {
-      const current = Atomics.load(this.state, 0);
+      const current = Atomics.load(this.#lockState, 0);
+
       // If write locked (current == -1), wait.
       if (current === WRITE_LOCKED) {
-        Atomics.wait(this.state, 0, WRITE_LOCKED);
+        Atomics.wait(this.#lockState, 0, WRITE_LOCKED);
         continue;
       }
 
       // Try to increment reader count
       if (
         Atomics.compareExchange(
-          this.state,
+          this.#lockState,
           0,
           current,
           current + READ_ONE,
         ) === current
       ) {
-        return this.createReadGuard();
+        return new RwLockReadGuard(this.#data, this.#createReadController());
       }
-      // CAS failed, retry loop
     }
   }
 
-  async read(): Promise<RwLockReadGuard<T>> {
+  public async read(): Promise<RwLockReadGuard<T>> {
     while (true) {
-      const current = Atomics.load(this.state, 0);
+      const current = Atomics.load(this.#lockState, 0);
+
       if (current === WRITE_LOCKED) {
-        const res = Atomics.waitAsync(this.state, 0, WRITE_LOCKED);
-        if (res.async) await res.value;
+        const res = Atomics.waitAsync(this.#lockState, 0, WRITE_LOCKED);
+        if (res.async) {
+          await res.value;
+        }
         continue;
       }
 
       if (
         Atomics.compareExchange(
-          this.state,
+          this.#lockState,
           0,
           current,
           current + READ_ONE,
         ) === current
       ) {
-        return this.createReadGuard();
+        return new RwLockReadGuard(this.#data, this.#createReadController());
       }
     }
   }
 
-  // --- Write Methods ---
-
-  writeSync(): RwLockWriteGuard<T> {
+  public blockingWrite(): RwLockWriteGuard<T> {
     while (true) {
-      const current = Atomics.load(this.state, 0);
+      const current = Atomics.load(this.#lockState, 0);
       // Can only write if strictly UNLOCKED (0).
-      // If readers exist (>0) or another writer (-1), we wait.
       if (current !== UNLOCKED) {
-        Atomics.wait(this.state, 0, current);
+        Atomics.wait(this.#lockState, 0, current);
         continue;
       }
 
       if (
-        Atomics.compareExchange(this.state, 0, UNLOCKED, WRITE_LOCKED) ===
+        Atomics.compareExchange(this.#lockState, 0, UNLOCKED, WRITE_LOCKED) ===
           UNLOCKED
       ) {
-        return this.createWriteGuard();
+        return new RwLockWriteGuard(this.#data, this.#createWriteController());
       }
     }
   }
 
-  async write(): Promise<RwLockWriteGuard<T>> {
+  public async write(): Promise<RwLockWriteGuard<T>> {
     while (true) {
-      const current = Atomics.load(this.state, 0);
+      const current = Atomics.load(this.#lockState, 0);
       if (current !== UNLOCKED) {
-        const res = Atomics.waitAsync(this.state, 0, current);
-        if (res.async) await res.value;
+        const res = Atomics.waitAsync(this.#lockState, 0, current);
+        if (res.async) {
+          await res.value;
+        }
         continue;
       }
 
       if (
-        Atomics.compareExchange(this.state, 0, UNLOCKED, WRITE_LOCKED) ===
+        Atomics.compareExchange(this.#lockState, 0, UNLOCKED, WRITE_LOCKED) ===
           UNLOCKED
       ) {
-        return this.createWriteGuard();
+        return new RwLockWriteGuard(this.#data, this.#createWriteController());
       }
     }
-  }
-
-  private createReadGuard(): RwLockReadGuard<T> {
-    let released = false;
-    return {
-      value: this.data,
-      [Symbol.dispose]: () => {
-        if (!released) {
-          Atomics.sub(this.state, 0, READ_ONE);
-          // If we were the last reader (result is now 0), notify potential writers
-          if (Atomics.load(this.state, 0) === UNLOCKED) {
-            Atomics.notify(this.state, 0, 1);
-          }
-          released = true;
-        }
-      },
-    };
-  }
-
-  private createWriteGuard(): RwLockWriteGuard<T> {
-    let released = false;
-    return {
-      value: this.data,
-      [Symbol.dispose]: () => {
-        if (!released) {
-          Atomics.store(this.state, 0, UNLOCKED);
-          // Notify all waiting readers or one waiting writer
-          Atomics.notify(this.state, 0, Infinity);
-          released = true;
-        }
-      },
-    };
   }
 
   [toSerialized]() {
     let serializedData;
     let transfer: Transferable[] = [];
 
-    if (this.data !== undefined) {
-      const result = serialize(this.data);
+    if (this.#data !== undefined) {
+      const result = serialize(this.#data);
       serializedData = result.value;
       transfer = result.transfer;
     }
 
     return {
       value: {
-        stateBuffer: this.state.buffer,
+        stateBuffer: this.#lockState.buffer,
         data: serializedData,
       },
       transfer,

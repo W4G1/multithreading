@@ -9,7 +9,7 @@ Deno.test("Mutex increment async", async () => {
 
   // 2. Spawn Worker
   const handle1 = spawn(move(mutex), async (lock) => {
-    using guard = await lock.acquire();
+    using guard = await lock.lock();
 
     await new Promise((r) => setTimeout(r, 500));
 
@@ -20,7 +20,7 @@ Deno.test("Mutex increment async", async () => {
   await new Promise((r) => setTimeout(r, 50));
 
   const handle2 = spawn(move(mutex), async (lock) => {
-    using guard = await lock.acquire();
+    using guard = await lock.lock();
 
     // Mutate the shared value
     guard.value[0]! += 10;

@@ -11,7 +11,7 @@ Deno.test("Mutex with Transferable Data (Standard Int32Array)", async () => {
 
   // 2. Spawn Worker
   const handle = spawn(move(mutex), (lock) => {
-    using guard = lock.acquireSync();
+    using guard = lock.blockingLock();
 
     const val = guard.value[0];
     // Mutate the local (transferred) copy

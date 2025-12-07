@@ -22,7 +22,7 @@ export class Condvar implements Serializable {
     }
   }
 
-  waitSync<T extends SharedMemoryView | void>(guard: MutexGuard<T>): void {
+  blockingWait<T extends SharedMemoryView | void>(guard: MutexGuard<T>): void {
     const controller = guard[INTERNAL_MUTEX_CONTROLLER];
     const seq = Atomics.load(this.#atomic, 0);
 
@@ -30,7 +30,7 @@ export class Condvar implements Serializable {
 
     Atomics.wait(this.#atomic, 0, seq);
 
-    controller.lockSync();
+    controller.blockingLock();
   }
 
   /**

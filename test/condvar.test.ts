@@ -13,7 +13,7 @@ Deno.test("Condvar: Main thread waits for Worker notification", async () => {
     // Sleep to ensure Main Thread enters the wait loop first
     await new Promise((r) => setTimeout(r, 500));
 
-    using guard = await m.acquire();
+    using guard = await m.lock();
     guard.value.ready = true;
     c.notifyOne();
 
@@ -22,7 +22,7 @@ Deno.test("Condvar: Main thread waits for Worker notification", async () => {
 
   // 3. Main Thread Logic
   {
-    using guard = await mutex.acquire();
+    using guard = await mutex.lock();
 
     // Verify initial state
     assertEquals(guard.value.ready, false, "Should start false");

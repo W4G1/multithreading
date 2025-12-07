@@ -21,4 +21,6 @@ Deno.test("MPMC - Auto Close via 'using' (Sender Drop)", async () => {
 
   assertFalse(r3.ok, "Channel should have auto-closed after worker exit");
   assertEquals((r3 as any).error.message, "Channel closed");
+
+  await new Promise((r) => setTimeout(r, 0));
 });

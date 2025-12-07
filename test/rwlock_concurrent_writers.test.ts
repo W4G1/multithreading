@@ -21,7 +21,7 @@ Deno.test("RwLock: Concurrent Writers (Data Integrity Check)", async () => {
   // and the final result would be less than 200.
   const workerFn = (lock: RwLock<Uint8Array>, count: number) => {
     for (let i = 0; i < count; i++) {
-      using guard = lock.writeSync();
+      using guard = lock.blockingWrite();
 
       const current = guard.value[0]!;
 
