@@ -15,17 +15,16 @@ export class WorkerPool {
 
   private codeCache = new Map<string, Promise<string>>();
   private maxThreads: number;
-  private workerUrl: string;
   private taskIdCounter = 0;
 
   constructor(maxThreads?: number) {
     this.maxThreads = maxThreads ?? navigator.hardwareConcurrency ?? 4;
-    const extension = import.meta.url.split(".").at(-1)?.split("?").at(0)!;
-    this.workerUrl = new URL("./worker." + extension, import.meta.url).href;
   }
 
   private spawnWorker(): Worker {
-    const worker = new Worker(this.workerUrl, { type: "module" });
+    const worker = new Worker(new URL("./worker.ts", import.meta.url), {
+      type: "module",
+    });
     this.pending.set(worker, new Map());
     this.workerLoad.set(worker, 0);
 

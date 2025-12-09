@@ -14,7 +14,7 @@ if ("Deno" in globalThis) {
    * event loop iteration. As such, V8 doesn't have any way to wake up Deno's event loop, and the waitAsync timeout will
    * only fire when the event loop is woken up in some other way:
    */
-  const { setImmediate } = await import("node:timers");
+  const { setImmediate } = await import("node:" + "timers");
 
   const originalWaitAsync = Atomics.waitAsync;
 

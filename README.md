@@ -432,7 +432,7 @@ Content-Security-Policy: default-src 'self'; worker-src 'self' blob:; script-src
       * `write()`: Async exclusive write access (Recommended).
       * `blockingRead()` / `blockingWrite()`: Synchronous/Blocking variants.
   * **`Semaphore`**:
-      * `acquire(amount?)`: Async wait (Recommended) for `n` permits. Returns `Promise<SemaphoreGuard>`.
+      * `acquire(amount?)`: Async wait for `n` permits (Recommended). Returns `Promise<SemaphoreGuard>`.
       * `tryAcquire(amount?)`: Non-blocking. Returns `SemaphoreGuard` or `null`.
       * `blockingAcquire(amount?)`: Blocking wait. Returns `SemaphoreGuard`.
   * **`Condvar`**:

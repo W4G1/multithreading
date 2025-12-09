@@ -10,7 +10,7 @@ if (isNode) {
     isMainThread,
     parentPort,
     Worker: NodeWorker,
-  } = await import("node:worker_threads");
+  } = await import("node:" + "worker_threads");
 
   globalThis.self = globalThis;
 

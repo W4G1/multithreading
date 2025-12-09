@@ -6,78 +6,87 @@ const OUT_DIR = "./dist";
 const VERSION = Deno.args[0] || "0.0.1";
 
 console.log(`[Build] Cleaning ${OUT_DIR}...`);
-await Deno.remove(OUT_DIR, { recursive: true }).catch(() => {});
+try {
+  await Deno.remove(OUT_DIR, { recursive: true });
+} catch {
+  // Ignore if dir doesn't exist
+}
 await ensureDir(OUT_DIR);
 
 /**
  * Helper to rewrite .ts imports to .js imports inside transpiled code
+ * AND rewrite new URL("./worker.ts") to new URL("./worker.js")
  */
-const rewriteImportsVisitor =
-  (context: ts.TransformationContext) => (node: ts.Node): ts.Node => {
+const transformer: ts.TransformerFactory<ts.SourceFile> = (
+  context,
+) => {
+  const visitor: ts.Visitor = (node) => {
+    // 1. Handle Static Imports/Exports (import ... from "./x.ts")
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       if (node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-        const originalPath = node.moduleSpecifier.text;
-        if (originalPath.endsWith(".ts")) {
-          return (
-            ts.isImportDeclaration(node)
-              ? ts.factory.updateImportDeclaration
-              : ts.factory.updateExportDeclaration
-          )(
-            // @ts-ignore: Dynamic dispatch for update method
-            node,
-            node.modifiers,
-            node.isTypeOnly ? node.isTypeOnly : node.importClause, // Handle difference in args
-            node.isTypeOnly ? node.exportClause : undefined, // Handle difference in args
-            ts.factory.createStringLiteral(
-              originalPath.replace(/\.ts$/, ".js"),
-            ),
-            node.attributes,
+        const text = node.moduleSpecifier.text;
+        if (text.endsWith(".ts")) {
+          const newSpecifier = ts.factory.createStringLiteral(
+            text.replace(/\.ts$/, ".js"),
           );
-        }
-      }
-    }
-    return ts.visitEachChild(node, rewriteImportsVisitor(context), context);
-  };
 
-const importTransformer: ts.TransformerFactory<ts.SourceFile> = (context) => {
-  return (sourceFile) => {
-    const visitor: ts.Visitor = (node) => {
-      // Import/Export Rewriting (.ts -> .js)
-      if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
-        if (node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
-          const text = node.moduleSpecifier.text;
-          if (text.endsWith(".ts")) {
-            const newSpecifier = ts.factory.createStringLiteral(
-              text.replace(/\.ts$/, ".js"),
+          if (ts.isImportDeclaration(node)) {
+            return ts.factory.updateImportDeclaration(
+              node,
+              node.modifiers,
+              node.importClause,
+              newSpecifier,
+              node.attributes,
             );
-
-            if (ts.isImportDeclaration(node)) {
-              return ts.factory.updateImportDeclaration(
-                node,
-                node.modifiers,
-                node.importClause,
-                newSpecifier,
-                node.attributes,
-              );
-            } else {
-              return ts.factory.updateExportDeclaration(
-                node,
-                node.modifiers,
-                node.isTypeOnly,
-                node.exportClause,
-                newSpecifier,
-                node.attributes,
-              );
-            }
+          } else {
+            return ts.factory.updateExportDeclaration(
+              node,
+              node.modifiers,
+              node.isTypeOnly,
+              node.exportClause,
+              newSpecifier,
+              node.attributes,
+            );
           }
         }
       }
+    }
 
-      return ts.visitEachChild(node, visitor, context);
-    };
+    // 2. Handle Dynamic Worker URL (new URL("./worker.ts", ...))
+    if (ts.isNewExpression(node)) {
+      // Check if the expression being new'ed is "URL"
+      if (ts.isIdentifier(node.expression) && node.expression.text === "URL") {
+        if (node.arguments && node.arguments.length > 0) {
+          const firstArg = node.arguments[0]!;
 
-    return ts.visitNode(sourceFile, visitor) as ts.SourceFile;
+          // Check if first arg is a string literal ending in .ts
+          if (ts.isStringLiteral(firstArg) && firstArg.text.endsWith(".ts")) {
+            console.log(
+              `[Transform] Rewriting new URL("${firstArg.text}") -> .js`,
+            );
+
+            const newArg = ts.factory.createStringLiteral(
+              firstArg.text.replace(/\.ts$/, ".js"),
+            );
+
+            // Create a new arguments array, preserving the second argument (import.meta.url)
+            const newArguments = [newArg, ...node.arguments.slice(1)];
+
+            return ts.factory.updateNewExpression(
+              node,
+              node.expression,
+              node.typeArguments,
+              newArguments,
+            );
+          }
+        }
+      }
+    }
+
+    return ts.visitEachChild(node, visitor, context);
   };
+
+  return (sourceFile) => ts.visitNode(sourceFile, visitor) as ts.SourceFile;
 };
 
 console.log("[Build] Compiling TypeScript...");
@@ -100,8 +109,8 @@ const host = ts.createCompilerHost(compilerOptions);
 const program = ts.createProgram(entryPoints, compilerOptions, host);
 
 const emitResult = program.emit(undefined, undefined, undefined, undefined, {
-  after: [importTransformer],
-  afterDeclarations: [importTransformer],
+  after: [transformer],
+  afterDeclarations: [transformer],
 });
 
 const allDiagnostics = ts
@@ -152,6 +161,7 @@ const packageJson = {
     "worker-pool",
     "thread-pool",
     "concurrency",
+    "atomics",
     "deno",
     "bun",
   ],
