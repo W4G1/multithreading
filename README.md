@@ -1,5 +1,6 @@
 <div align="center">
-  <img width="140" height="119" alt="Logo" src="https://github.com/user-attachments/assets/e7750ae6-3acd-4c81-9417-3979f51535f3" />
+
+  ![image](https://github.com/user-attachments/assets/10392149-b891-40d5-b8a4-aa269db686f1)
 
   <h1>Multithreading.js</h1>
 
