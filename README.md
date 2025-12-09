@@ -1,8 +1,6 @@
 <div align="center">
 
-  <!-- ![Logo](https://github.com/user-attachments/assets/c6a9e57e-ee64-4093-aac3-e6db2b12488b) -->
-
-  ![Group 77(2)](https://github.com/user-attachments/assets/3ad136b9-e14c-4212-8526-01c44f8bc2cd)
+  ![Logo](https://github.com/user-attachments/assets/0981b64a-8c55-48b5-b369-0c765757a162)
 
   <h1>Multithreading.js</h1>
 
