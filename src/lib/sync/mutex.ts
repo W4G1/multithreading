@@ -25,13 +25,11 @@ export class MutexGuard<T extends SharedMemoryView | void>
   implements Disposable {
   #data: T;
   #released = false;
-  [INTERNAL_MUTEX_CONTROLLER]!: MutexController;
-
   /**
    * @internal
-   * We pass the controller here, but we don't store it in a public field.
-   * We attach it using defineProperty.
    */
+  [INTERNAL_MUTEX_CONTROLLER]!: MutexController;
+
   constructor(data: T, controller: MutexController) {
     this.#data = data;
     this.#released = false;
@@ -136,6 +134,9 @@ export class Mutex<T extends SharedMemoryView | void = void>
     return new MutexGuard(this.#data, this.#createController());
   }
 
+  /**
+   * @internal
+   */
   [toSerialized]() {
     let serializedData;
     let transfer: Transferable[] = [];
@@ -155,6 +156,9 @@ export class Mutex<T extends SharedMemoryView | void = void>
     };
   }
 
+  /**
+   * @internal
+   */
   static override [toDeserialized](
     obj: ReturnType<Mutex<any>[typeof toSerialized]>["value"],
   ) {

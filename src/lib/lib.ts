@@ -27,7 +27,7 @@ function getPool(): WorkerPool {
  * A branded type that ensures the array has been explicitly marked
  * by the move() function.
  */
-const moveTag = Symbol.for("Thread.move");
+const moveTag = Symbol("Thread.move");
 export type MovedData<T extends any[]> = T & { readonly [moveTag]: true };
 
 export function move<Args extends any[]>(...args: Args): MovedData<Args> {

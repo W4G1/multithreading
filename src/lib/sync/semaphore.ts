@@ -65,6 +65,9 @@ export class Semaphore extends Serializable {
    * [1]: waiters (The number of threads currently waiting)
    */
   #state: Int32Array<SharedArrayBuffer>;
+  /**
+   * @internal
+   */
   [INTERNAL_SEMAPHORE_CONTROLLER]!: SemaphoreController;
 
   constructor(initialCount: number, _buffer?: SharedArrayBuffer) {
@@ -175,6 +178,9 @@ export class Semaphore extends Serializable {
     }
   }
 
+  /**
+   * @internal
+   */
   [toSerialized]() {
     return {
       value: this.#state.buffer,
@@ -182,6 +188,9 @@ export class Semaphore extends Serializable {
     };
   }
 
+  /**
+   * @internal
+   */
   static override [toDeserialized](buffer: SharedArrayBuffer) {
     return new Semaphore(0, buffer);
   }

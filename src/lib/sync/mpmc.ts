@@ -37,6 +37,9 @@ class ChannelInternals<T> extends Serializable {
     super();
   }
 
+  /**
+   * @internal
+   */
   [toSerialized]() {
     const itemsSer = serialize(this.items);
     const sendLockSer = serialize(this.sendLock);
@@ -205,6 +208,9 @@ export class Sender<T> extends Serializable implements Disposable {
     this.disposed = true;
   }
 
+  /**
+   * @internal
+   */
   [toSerialized]() {
     if (this.disposed) {
       throw new Error("Cannot move a disposed Sender");
@@ -215,6 +221,9 @@ export class Sender<T> extends Serializable implements Disposable {
     return serialize(this.internals);
   }
 
+  /**
+   * @internal
+   */
   static override [toDeserialized](
     obj: ReturnType<Sender<any>[typeof toSerialized]>["value"],
   ) {
@@ -359,6 +368,9 @@ export class Receiver<T> extends Serializable implements Disposable {
     }
   }
 
+  /**
+   * @internal
+   */
   [toSerialized]() {
     if (this.disposed) {
       throw new Error("Cannot move a disposed Receiver");
@@ -371,6 +383,9 @@ export class Receiver<T> extends Serializable implements Disposable {
     return serialize(this.internals);
   }
 
+  /**
+   * @internal
+   */
   static override [toDeserialized](
     obj: ReturnType<Receiver<any>[typeof toSerialized]>["value"],
   ) {

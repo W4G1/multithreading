@@ -29,6 +29,9 @@ export class RwLockReadGuard<T extends SharedMemoryView | void>
   implements Disposable {
   #data: T;
   #released = false;
+  /**
+   * @internal
+   */
   [INTERNAL_RWLOCK_CONTROLLER]!: RwLockController;
 
   constructor(data: T, controller: RwLockController) {
@@ -248,6 +251,9 @@ export class RwLock<T extends SharedMemoryView | void = void>
     }
   }
 
+  /**
+   * @internal
+   */
   [toSerialized]() {
     let serializedData;
     let transfer: Transferable[] = [];
@@ -267,6 +273,9 @@ export class RwLock<T extends SharedMemoryView | void = void>
     };
   }
 
+  /**
+   * @internal
+   */
   static override [toDeserialized](
     obj: ReturnType<RwLock<any>[typeof toSerialized]>["value"],
   ) {

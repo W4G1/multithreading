@@ -1,7 +1,7 @@
 import { Envelope } from "./types.ts";
 
-export const toSerialized = Symbol.for("Thread.Serialize");
-export const toDeserialized = Symbol.for("Thread.Deserialize");
+export const toSerialized = Symbol("Thread.Serialize");
+export const toDeserialized = Symbol("Thread.Deserialize");
 
 export const enum PayloadType {
   RAW = 0, // User data (Numbers, Strings, Plain Objects)

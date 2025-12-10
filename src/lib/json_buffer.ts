@@ -7,7 +7,7 @@ import {
 
 export type Proxyable = Record<string | symbol, any> | any[];
 
-const CONSOLE_VIEW = Symbol.for("SharedJsonBuffer.consoleView");
+const CONSOLE_VIEW = Symbol("SharedJsonBuffer.consoleView");
 
 const OFFSET_FREE_PTR = 0;
 const OFFSET_ROOT = 8; // 8-byte aligned
@@ -1332,6 +1332,9 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     }
   }
 
+  /**
+   * @internal
+   */
   [toSerialized]() {
     return {
       value: this.buffer,
@@ -1340,6 +1343,9 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     };
   }
 
+  /**
+   * @internal
+   */
   static override [toDeserialized](
     data: ReturnType<
       SharedJsonBufferImpl<any>[typeof toSerialized]
