@@ -191,7 +191,7 @@ const packageJson = {
   module: "./lib/lib.js",
   exports: {
     ".": {
-      "types": "./src/index.d.ts",
+      "types": "./src/lib/lib.d.ts",
       "bun": "./src/lib/lib.js",
       "deno": "./src/deno/lib.js",
       "browser": "./src/browser/lib.js",
