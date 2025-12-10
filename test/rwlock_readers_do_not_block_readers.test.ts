@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { move, RwLock, spawn } from "../lib/lib.ts";
+import { move, RwLock, spawn } from "../src/deno/lib.ts";
 
 Deno.test("RwLock: Readers do not block Readers", async () => {
   // This test ensures that multiple readers can access data concurrently.

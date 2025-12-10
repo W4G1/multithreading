@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { channel, move, spawn } from "../lib/lib.ts";
+import { channel, move, spawn } from "../src/deno/lib.ts";
 
 Deno.test("MPMC - Multiple Producers (Clone & Contention)", async () => {
   const [tx, rx] = channel<number>(50);

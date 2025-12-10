@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { channel, move, spawn } from "../lib/lib.ts";
+import { channel, move, spawn } from "../src/deno/lib.ts";
 
 Deno.test("MPMC - Close Wakes Blocked Senders", async () => {
   // Scenario: Channel is full. Sender is waiting.

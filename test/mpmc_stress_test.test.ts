@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { channel, move, spawn } from "../lib/lib.ts";
+import { channel, move, spawn } from "../src/deno/lib.ts";
 
 Deno.test("MPMC - Stress Test (4 Producers -> 4 Consumers)", async () => {
   const [tx, rx] = channel<number>(100); // Buffer smaller than total items

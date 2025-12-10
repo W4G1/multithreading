@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertFalse } from "@std/assert";
-import { channel } from "../lib/lib.ts";
+import { channel } from "../src/deno/lib.ts";
 
 Deno.test("MPMC - Manual Dispose (Main Thread)", async () => {
   const [tx, rx] = channel<number>(10);

@@ -1,5 +1,3 @@
-// Applies necessary polyfills for certain runtimes
-import "./polyfills/mod.ts";
 import { deserialize, serialize, type WorkerTaskPayload } from "./shared.ts";
 
 // Import for side-effects: This triggers the static { register(this) } blocks

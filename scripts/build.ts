@@ -1,5 +1,5 @@
 import ts from "typescript";
-import { ensureDir } from "@std/fs";
+import { ensureDir, expandGlob } from "@std/fs";
 import * as path from "@std/path";
 
 const OUT_DIR = "./dist";
@@ -89,9 +89,22 @@ const transformer: ts.TransformerFactory<ts.SourceFile> = (
   return (sourceFile) => ts.visitNode(sourceFile, visitor) as ts.SourceFile;
 };
 
-console.log("[Build] Compiling TypeScript...");
+console.log("[Build] Discovering source files...");
 
-const entryPoints = ["./lib/lib.ts", "./lib/worker.ts"];
+const entryPoints: string[] = [];
+
+// Recursively find all .ts files in ./src
+for await (const file of expandGlob("./src/**/*.ts")) {
+  // We typically exclude .d.ts files from being entry points
+  // (unless you specifically need to process them)
+  if (!file.path.endsWith(".d.ts")) {
+    entryPoints.push(file.path);
+  }
+}
+
+console.log(`[Build] Found ${entryPoints.length} files to compile.`);
+
+console.log("[Build] Compiling TypeScript...");
 
 const compilerOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.ES2020,
@@ -175,11 +188,15 @@ const packageJson = {
     url: "https://github.com/W4G1/multithreading/issues",
   },
   type: "module",
-  module: "./esm/lib.js",
+  module: "./lib/lib.js",
   exports: {
     ".": {
-      import: "./lib/lib.js",
-      types: "./lib/lib.d.ts",
+      "types": "./src/index.d.ts",
+      "bun": "./src/lib/lib.js",
+      "deno": "./src/deno/lib.js",
+      "browser": "./src/browser/lib.js",
+      "node": "./src/node/lib.js",
+      "default": "./src/lib/lib.js",
     },
   },
   scripts: {},

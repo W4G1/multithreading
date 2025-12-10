@@ -1,15 +1,8 @@
-import "./polyfills/mod.ts";
-
 import { getCallerLocation } from "./caller_location.ts";
 import { patchDynamicImports } from "./patch_import.ts";
 import { WorkerPool } from "./pool.ts";
 import type { JoinHandle, Result, ThreadTask } from "./types.ts";
-import { toSerialized } from "./shared.ts";
-import { Mutex } from "./sync/mutex.ts";
-import { Condvar } from "./sync/condvar.ts";
-import { RwLock } from "./sync/rwlock.ts";
-import { Receiver, Sender } from "./sync/mpmc.ts";
-import { Semaphore } from "./sync/semaphore.ts";
+import { checkMoveArgs } from "./check_move_args.ts";
 
 export * from "./sync/mod.ts";
 export { SharedJsonBuffer } from "./json_buffer.ts";
@@ -38,23 +31,7 @@ const moveTag = Symbol.for("Thread.move");
 export type MovedData<T extends any[]> = T & { readonly [moveTag]: true };
 
 export function move<Args extends any[]>(...args: Args): MovedData<Args> {
-  for (const arg of args) {
-    const isRawSAB = arg instanceof SharedArrayBuffer;
-    // Check if it's a TypedArray (e.g. Uint8Array) viewing a Shared buffer
-    const isViewSAB = ArrayBuffer.isView(arg) &&
-      arg.buffer instanceof SharedArrayBuffer;
-    const isThreadSafe = arg instanceof Mutex || arg instanceof Condvar ||
-      arg instanceof RwLock || arg instanceof Sender ||
-      arg instanceof Receiver || arg instanceof Semaphore;
-    const isLibrarySAB = !isThreadSafe &&
-      typeof arg[toSerialized] !== "undefined";
-
-    if (isRawSAB || isViewSAB || isLibrarySAB) {
-      console.warn(
-        "Warning: You are passing a SharedArrayBuffer to a worker without locking. Please wrap this data in a Mutex() or RwLock() to prevent race conditions.",
-      );
-    }
-  }
+  checkMoveArgs(args);
 
   return Object.defineProperty(args, moveTag, {
     enumerable: false,

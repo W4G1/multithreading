@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { SharedJsonBuffer } from "../lib/json_buffer.ts";
+import { SharedJsonBuffer } from "../src/deno/lib.ts";
 
 Deno.test("Basic Object: Read and Write", () => {
   const db = new SharedJsonBuffer({

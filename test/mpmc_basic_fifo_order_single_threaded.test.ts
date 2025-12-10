@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { channel } from "../lib/sync/mpmc.ts";
+import { channel } from "../src/lib/lib.ts";
 
 Deno.test("MPMC - Basic FIFO Order (Single Threaded Logic)", async () => {
   const [tx, rx] = channel<number>(10);

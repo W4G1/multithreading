@@ -5,6 +5,12 @@ import {
 } from "./shared.ts";
 import type { ThreadTask } from "./types.ts";
 
+let workerUrl: URL = new URL("./worker.ts", import.meta.url);
+
+export function overrideWorkerUrl(url: URL) {
+  workerUrl = url;
+}
+
 export class WorkerPool {
   private workers: Worker[] = [];
   private workerLoad = new Map<Worker, number>();
@@ -22,7 +28,7 @@ export class WorkerPool {
   }
 
   private spawnWorker(): Worker {
-    const worker = new Worker(new URL("./worker.ts", import.meta.url), {
+    const worker = new Worker(workerUrl, {
       type: "module",
     });
     this.pending.set(worker, new Map());

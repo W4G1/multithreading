@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert/equals";
-import { channel, move, spawn } from "../lib/lib.ts";
+import { channel, move, spawn } from "../src/deno/lib.ts";
 import { assert } from "@std/assert";
 
 Deno.test("MPMC - Complex Object Serialization", async () => {

@@ -1,5 +1,5 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
-import { patchDynamicImports } from "../lib/patch_import.ts";
+import { patchDynamicImports } from "../src/lib/patch_import.ts";
 
 // Standard generic path for testing
 const CALLER_PATH = "/home/user/project/src/index.ts";

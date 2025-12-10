@@ -1,4 +1,4 @@
-import { move, Mutex, spawn } from "../lib/lib.ts";
+import { move, Mutex, spawn } from "../src/deno/lib.ts";
 
 Deno.test("Mutex async", async () => {
   const sab = new SharedArrayBuffer(4);

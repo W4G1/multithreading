@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { move, RwLock, spawn } from "../lib/lib.ts";
+import { move, RwLock, spawn } from "../src/deno/lib.ts";
 
 Deno.test("RwLock: Concurrent Writers (Data Integrity Check)", async () => {
   // 1. Setup Shared Memory

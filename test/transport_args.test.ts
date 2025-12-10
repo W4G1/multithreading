@@ -1,5 +1,5 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
-import { move, spawn } from "../lib/lib.ts";
+import { move, spawn } from "../src/deno/lib.ts";
 
 Deno.test("Transport Hierarchy: Share > Transfer > Clone (Argument List)", async () => {
   // A. Shared Resource (SharedArrayBuffer)

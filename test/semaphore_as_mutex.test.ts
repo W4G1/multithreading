@@ -1,5 +1,5 @@
 import { assertStrictEquals } from "@std/assert";
-import { move, Semaphore, spawn } from "../lib/lib.ts";
+import { move, Semaphore, spawn } from "../src/deno/lib.ts";
 
 Deno.test("Semaphore as Mutex (Async + 'using')", async () => {
   const sem = new Semaphore(1);

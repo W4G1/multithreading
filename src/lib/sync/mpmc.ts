@@ -10,17 +10,17 @@ import type { Result } from "../types.ts";
 import { INTERNAL_SEMAPHORE_CONTROLLER, Semaphore } from "./semaphore.ts";
 import { SharedJsonBuffer } from "../json_buffer.ts";
 
-// --- Memory Layout Constants ---
+// Memory layout constants
 const HEAD_IDX = 0;
 const TAIL_IDX = 1;
 const CLOSED_IDX = 2;
 const CAP_IDX = 3;
-// Reference Counting Indices
+// Reference counting indices
 const TX_COUNT_IDX = 4;
 const RX_COUNT_IDX = 5;
 const META_SIZE = 6;
 
-// --- Internal Data Container ---
+// Internal data container
 class ChannelInternals<T> implements Serializable {
   static {
     register(this);
@@ -74,8 +74,6 @@ class ChannelInternals<T> implements Serializable {
     );
   }
 }
-
-// --- Sender ---
 
 export class Sender<T> implements Serializable, Disposable {
   static {
@@ -194,8 +192,6 @@ export class Sender<T> implements Serializable, Disposable {
   }
 
   [Symbol.dispose]() {
-    // If it was moved (serialized), _disposed is true, so this does nothing.
-    // If it was NOT moved, we decrement.
     if (this.disposed) return;
 
     const prevCount = Atomics.sub(this.internals.state, TX_COUNT_IDX, 1);
@@ -206,16 +202,11 @@ export class Sender<T> implements Serializable, Disposable {
   }
 
   [toSerialized]() {
-    // --- CHANGE IS HERE ---
     if (this.disposed) {
       throw new Error("Cannot move a disposed Sender");
     }
 
-    // 1. Mark as disposed LOCALLY. You cannot use this handle anymore on this thread.
     this.disposed = true;
-
-    // 2. We do NOT increment the count.
-    // We are transferring ownership of the EXISTING count to the worker.
 
     return serialize(this.internals);
   }
@@ -227,8 +218,6 @@ export class Sender<T> implements Serializable, Disposable {
     return new Sender(internals);
   }
 }
-
-// --- Receiver ---
 
 export class Receiver<T> implements Serializable, Disposable {
   static {
@@ -383,8 +372,6 @@ export class Receiver<T> implements Serializable, Disposable {
     return new Receiver(internals);
   }
 }
-
-// --- Factory ---
 
 export function channel<T>(capacity: number = 32): [Sender<T>, Receiver<T>] {
   const stateSab = new SharedArrayBuffer(META_SIZE * 4);

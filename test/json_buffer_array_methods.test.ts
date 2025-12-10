@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertExists } from "@std/assert";
-import { SharedJsonBuffer } from "../lib/json_buffer.ts";
+import { SharedJsonBuffer } from "../src/deno/lib.ts";
 
 // --------------------------------------------------------------------------
 // 1. Mutator Methods

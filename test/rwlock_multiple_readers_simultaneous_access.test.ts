@@ -1,6 +1,6 @@
 import { assertGreater } from "@std/assert";
-import { move, RwLock, spawn } from "../lib/lib.ts";
-import { SharedJsonBuffer } from "../lib/json_buffer.ts";
+import { move, RwLock, spawn } from "../src/deno/lib.ts";
+import { SharedJsonBuffer } from "../src/deno/lib.ts";
 
 Deno.test("RwLock: Multiple readers simultaneous access", async () => {
   const state = new SharedJsonBuffer({ count: 0 });
