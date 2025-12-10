@@ -1,6 +1,6 @@
 import {
   register,
-  type Serializable,
+  Serializable,
   toDeserialized,
   toSerialized,
 } from "../shared.ts";
@@ -14,7 +14,7 @@ export interface SemaphoreController {
   release(amount: number): void;
 }
 
-export class SemaphoreGuard {
+export class SemaphoreGuard implements Disposable {
   #amount: number;
   #released = false;
   [INTERNAL_SEMAPHORE_CONTROLLER]!: SemaphoreController;
@@ -54,9 +54,9 @@ export class SemaphoreGuard {
   }
 }
 
-export class Semaphore implements Serializable {
+export class Semaphore extends Serializable {
   static {
-    register(this);
+    register(3, this);
   }
 
   /**
@@ -68,6 +68,7 @@ export class Semaphore implements Serializable {
   [INTERNAL_SEMAPHORE_CONTROLLER]!: SemaphoreController;
 
   constructor(initialCount: number, _buffer?: SharedArrayBuffer) {
+    super();
     if (_buffer) {
       this.#state = new Int32Array(_buffer);
     } else {
@@ -181,7 +182,7 @@ export class Semaphore implements Serializable {
     };
   }
 
-  static [toDeserialized](buffer: SharedArrayBuffer) {
+  static override [toDeserialized](buffer: SharedArrayBuffer) {
     return new Semaphore(0, buffer);
   }
 }

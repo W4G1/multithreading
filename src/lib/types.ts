@@ -1,4 +1,5 @@
 import type { SharedJsonBuffer } from "./json_buffer.ts";
+import type { PayloadType } from "./shared.ts";
 
 export type Result<T, E = Error> =
   | { ok: true; value: T }
@@ -29,3 +30,25 @@ export type SharedMemoryView =
   | BigUint64Array<SharedArrayBuffer>
   | DataView<SharedArrayBuffer>
   | SharedJsonBuffer<any>;
+
+/**
+ * The wire format.
+ * 't': type
+ * 'v': value
+ * 'c': typeId (optional, only for LIB)
+ */
+export type Envelope =
+  | { t: PayloadType.RAW; v: any }
+  | { t: PayloadType.LIB; c: number; v: any };
+
+export type WorkerTaskPayload = {
+  type: "RUN";
+  taskId: number;
+  fnId: string;
+  code: string;
+  args: Envelope[];
+};
+
+export type WorkerResponsePayload =
+  | { type: "RESULT"; taskId: number; result: Envelope }
+  | { type: "ERROR"; taskId: number; error: string; stack?: string };

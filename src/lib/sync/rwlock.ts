@@ -2,7 +2,7 @@ import type { SharedMemoryView } from "../types.ts";
 import {
   deserialize,
   register,
-  type Serializable,
+  Serializable,
   serialize,
   toDeserialized,
   toSerialized,
@@ -25,7 +25,8 @@ const READ_ONE = 1;
  * Guard for Read access.
  * Allows multiple simultaneous readers.
  */
-export class RwLockReadGuard<T extends SharedMemoryView | void> {
+export class RwLockReadGuard<T extends SharedMemoryView | void>
+  implements Disposable {
   #data: T;
   #released = false;
   [INTERNAL_RWLOCK_CONTROLLER]!: RwLockController;
@@ -64,7 +65,8 @@ export class RwLockReadGuard<T extends SharedMemoryView | void> {
  * Guard for Write access.
  * Ensures exclusive access.
  */
-export class RwLockWriteGuard<T extends SharedMemoryView | void> {
+export class RwLockWriteGuard<T extends SharedMemoryView | void>
+  implements Disposable {
   #data: T;
   #released = false;
   [INTERNAL_RWLOCK_CONTROLLER]!: RwLockController;
@@ -100,15 +102,16 @@ export class RwLockWriteGuard<T extends SharedMemoryView | void> {
 }
 
 export class RwLock<T extends SharedMemoryView | void = void>
-  implements Serializable {
+  extends Serializable {
   static {
-    register(this);
+    register(2, this);
   }
 
   #lockState: Int32Array<SharedArrayBuffer>;
   #data: T;
 
   constructor(data?: T, _existingStateBuffer?: SharedArrayBuffer) {
+    super();
     this.#data = data as T;
     if (_existingStateBuffer) {
       this.#lockState = new Int32Array(_existingStateBuffer);
@@ -264,7 +267,7 @@ export class RwLock<T extends SharedMemoryView | void = void>
     };
   }
 
-  static [toDeserialized](
+  static override [toDeserialized](
     obj: ReturnType<RwLock<any>[typeof toSerialized]>["value"],
   ) {
     let data;

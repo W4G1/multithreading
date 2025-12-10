@@ -2,7 +2,7 @@ import type { SharedMemoryView } from "../types.ts";
 import {
   deserialize,
   register,
-  type Serializable,
+  Serializable,
   serialize,
   toDeserialized,
   toSerialized,
@@ -21,7 +21,8 @@ export interface MutexController {
 const LOCKED = 1;
 const UNLOCKED = 0;
 
-export class MutexGuard<T extends SharedMemoryView | void> {
+export class MutexGuard<T extends SharedMemoryView | void>
+  implements Disposable {
   #data: T;
   #released = false;
   [INTERNAL_MUTEX_CONTROLLER]!: MutexController;
@@ -62,9 +63,9 @@ export class MutexGuard<T extends SharedMemoryView | void> {
 }
 
 export class Mutex<T extends SharedMemoryView | void = void>
-  implements Serializable {
+  extends Serializable {
   static {
-    register(this);
+    register(0, this);
   }
 
   // Strict private fields
@@ -72,6 +73,7 @@ export class Mutex<T extends SharedMemoryView | void = void>
   #data: T;
 
   constructor(data?: T, _existingLockBuffer?: SharedArrayBuffer) {
+    super();
     this.#data = data as T;
 
     if (_existingLockBuffer) {
@@ -153,7 +155,7 @@ export class Mutex<T extends SharedMemoryView | void = void>
     };
   }
 
-  static [toDeserialized](
+  static override [toDeserialized](
     obj: ReturnType<Mutex<any>[typeof toSerialized]>["value"],
   ) {
     let data;

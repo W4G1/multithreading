@@ -1,6 +1,11 @@
 import { assertEquals } from "@std/assert";
-import { Condvar, move, Mutex, spawn } from "../src/deno/lib.ts";
-import { SharedJsonBuffer } from "../src/deno/lib.ts";
+import {
+  Condvar,
+  move,
+  Mutex,
+  SharedJsonBuffer,
+  spawn,
+} from "../src/deno/lib.ts";
 
 Deno.test("Condvar: Main thread waits for Worker notification", async () => {
   // 1. Setup Shared State

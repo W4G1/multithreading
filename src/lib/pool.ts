@@ -1,9 +1,5 @@
-import {
-  deserialize,
-  serialize,
-  type WorkerResponsePayload,
-} from "./shared.ts";
-import type { ThreadTask } from "./types.ts";
+import { deserialize, serialize } from "./shared.ts";
+import type { ThreadTask, WorkerResponsePayload } from "./types.ts";
 
 /**
  * In Vite, the worker detection will only work if the new URL() constructor is used directly inside the new Worker() declaration.

@@ -1,4 +1,5 @@
-import { deserialize, serialize, type WorkerTaskPayload } from "./shared.ts";
+import { deserialize, serialize } from "./shared.ts";
+import type { WorkerTaskPayload } from "./types.ts";
 
 // Import for side-effects: This triggers the static { register(this) } blocks
 import "./sync/mod.ts";

@@ -1,7 +1,7 @@
 import {
   deserialize,
   register,
-  type Serializable,
+  Serializable,
   serialize,
   toDeserialized,
   toSerialized,
@@ -21,9 +21,9 @@ const RX_COUNT_IDX = 5;
 const META_SIZE = 6;
 
 // Internal data container
-class ChannelInternals<T> implements Serializable {
+class ChannelInternals<T> extends Serializable {
   static {
-    register(this);
+    register(4, this);
   }
 
   constructor(
@@ -33,7 +33,9 @@ class ChannelInternals<T> implements Serializable {
     public recvLock: Semaphore,
     public itemsAvailable: Semaphore,
     public slotsAvailable: Semaphore,
-  ) {}
+  ) {
+    super();
+  }
 
   [toSerialized]() {
     const itemsSer = serialize(this.items);
@@ -61,7 +63,7 @@ class ChannelInternals<T> implements Serializable {
     };
   }
 
-  static [toDeserialized](
+  static override [toDeserialized](
     data: ReturnType<ChannelInternals<any>[typeof toSerialized]>["value"],
   ) {
     return new ChannelInternals(
@@ -75,14 +77,16 @@ class ChannelInternals<T> implements Serializable {
   }
 }
 
-export class Sender<T> implements Serializable, Disposable {
+export class Sender<T> extends Serializable implements Disposable {
   static {
-    register(this);
+    register(5, this);
   }
 
   private disposed = false;
 
-  constructor(private internals: ChannelInternals<T>) {}
+  constructor(private internals: ChannelInternals<T>) {
+    super();
+  }
 
   clone(): Sender<T> {
     if (this.disposed) throw new Error("Cannot clone disposed Sender");
@@ -211,7 +215,7 @@ export class Sender<T> implements Serializable, Disposable {
     return serialize(this.internals);
   }
 
-  static [toDeserialized](
+  static override [toDeserialized](
     obj: ReturnType<Sender<any>[typeof toSerialized]>["value"],
   ) {
     const internals = deserialize(obj);
@@ -219,14 +223,16 @@ export class Sender<T> implements Serializable, Disposable {
   }
 }
 
-export class Receiver<T> implements Serializable, Disposable {
+export class Receiver<T> extends Serializable implements Disposable {
   static {
-    register(this);
+    register(6, this);
   }
 
   private disposed = false;
 
-  constructor(private internals: ChannelInternals<T>) {}
+  constructor(private internals: ChannelInternals<T>) {
+    super();
+  }
 
   clone(): Receiver<T> {
     if (this.disposed) throw new Error("Cannot clone disposed Receiver");
@@ -365,7 +371,7 @@ export class Receiver<T> implements Serializable, Disposable {
     return serialize(this.internals);
   }
 
-  static [toDeserialized](
+  static override [toDeserialized](
     obj: ReturnType<Receiver<any>[typeof toSerialized]>["value"],
   ) {
     const internals = deserialize(obj);

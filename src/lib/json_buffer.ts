@@ -1,6 +1,6 @@
 import {
   register,
-  type Serializable,
+  Serializable,
   toDeserialized,
   toSerialized,
 } from "./shared.ts";
@@ -71,10 +71,10 @@ function initConsoleHooks() {
   }
 }
 
-class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
+class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
   static {
     initConsoleHooks();
-    register(this);
+    register(7, this);
   }
 
   // Views
@@ -107,6 +107,7 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
     obj: T,
     optionsOrBuffer?: SharedArrayBuffer | { size?: number },
   ) {
+    super();
     if (optionsOrBuffer instanceof SharedArrayBuffer) {
       this.buffer = optionsOrBuffer;
       this.initViews();
@@ -1335,11 +1336,11 @@ class SharedJsonBufferImpl<T extends Proxyable> implements Serializable {
     return {
       value: this.buffer,
       transfer: [],
-      className: SharedJsonBufferImpl.name,
+      typeId: 7,
     };
   }
 
-  static [toDeserialized](
+  static override [toDeserialized](
     data: ReturnType<
       SharedJsonBufferImpl<any>[typeof toSerialized]
     >["value"],

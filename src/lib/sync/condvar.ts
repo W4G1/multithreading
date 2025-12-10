@@ -1,20 +1,21 @@
 import { INTERNAL_MUTEX_CONTROLLER, type MutexGuard } from "./mutex.ts";
 import {
   register,
-  type Serializable,
+  Serializable,
   toDeserialized,
   toSerialized,
 } from "../shared.ts";
 import type { SharedMemoryView } from "../types.ts";
 
-export class Condvar implements Serializable {
+export class Condvar extends Serializable {
   static {
-    register(this);
+    register(1, this);
   }
 
   #atomic: Int32Array<SharedArrayBuffer>;
 
   constructor(_buffer?: SharedArrayBuffer) {
+    super();
     if (_buffer) {
       this.#atomic = new Int32Array(_buffer);
     } else {
@@ -76,7 +77,7 @@ export class Condvar implements Serializable {
     };
   }
 
-  static [toDeserialized](
+  static override [toDeserialized](
     obj: ReturnType<Condvar[typeof toSerialized]>["value"],
   ) {
     return new Condvar(obj);
