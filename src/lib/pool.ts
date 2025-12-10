@@ -5,10 +5,15 @@ import {
 } from "./shared.ts";
 import type { ThreadTask } from "./types.ts";
 
-let workerUrl: URL = new URL("./worker.ts", import.meta.url);
+/**
+ * In Vite, the worker detection will only work if the new URL() constructor is used directly inside the new Worker() declaration.
+ * Additionally, all options parameters must be static values (i.e. string literals).
+ */
+let getWorker = () =>
+  new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
 
-export function overrideWorkerUrl(url: URL) {
-  workerUrl = url;
+export function overrideGetWorker(fn: () => Worker) {
+  getWorker = fn;
 }
 
 export class WorkerPool {
@@ -28,9 +33,7 @@ export class WorkerPool {
   }
 
   private spawnWorker(): Worker {
-    const worker = new Worker(workerUrl, {
-      type: "module",
-    });
+    const worker = getWorker();
     this.pending.set(worker, new Map());
     this.workerLoad.set(worker, 0);
 

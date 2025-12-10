@@ -1,4 +1,6 @@
 import "./polyfill.ts";
-import { overrideWorkerUrl } from "../lib/pool.ts";
+import { overrideGetWorker } from "../lib/pool.ts";
 export * from "../lib/lib.ts";
-overrideWorkerUrl(new URL("./worker.ts", import.meta.url));
+overrideGetWorker(() =>
+  new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })
+);

@@ -188,7 +188,6 @@ const packageJson = {
     url: "https://github.com/W4G1/multithreading/issues",
   },
   type: "module",
-  module: "./lib/lib.js",
   exports: {
     ".": {
       "types": "./src/lib/lib.d.ts",
