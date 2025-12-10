@@ -190,12 +190,12 @@ const packageJson = {
   type: "module",
   exports: {
     ".": {
-      "types": "./src/lib/lib.d.ts",
-      "bun": "./src/lib/lib.js",
+      "types": "./src/default/lib.d.ts",
+      "bun": "./src/default/lib.js",
       "deno": "./src/deno/lib.js",
       "browser": "./src/browser/lib.js",
       "node": "./src/node/lib.js",
-      "default": "./src/lib/lib.js",
+      "default": "./src/default/lib.js",
     },
   },
   scripts: {},
