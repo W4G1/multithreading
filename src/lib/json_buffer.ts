@@ -510,8 +510,8 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       if (ptr === 0) return undefined;
 
       // Standard resolution
-      let curr = ptr;
-      let type = this._u32[curr >> 2]!;
+      const curr = ptr;
+      const type = this._u32[curr >> 2]!;
       if (type !== TYPE_MOVED) {
         this.s_len = this._u32[(curr + 8) >> 2]!;
         this.s_start = curr + 12;
@@ -1332,9 +1332,6 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     }
   }
 
-  /**
-   * @internal
-   */
   [toSerialized]() {
     return {
       value: this.buffer,
@@ -1343,9 +1340,6 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     };
   }
 
-  /**
-   * @internal
-   */
   static override [toDeserialized](
     data: ReturnType<
       SharedJsonBufferImpl<any>[typeof toSerialized]

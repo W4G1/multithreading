@@ -70,9 +70,6 @@ export class Condvar extends Serializable {
     Atomics.notify(this.#atomic, 0, Infinity);
   }
 
-  /**
-   * @internal
-   */
   [toSerialized]() {
     return {
       value: this.#atomic.buffer,
@@ -80,9 +77,6 @@ export class Condvar extends Serializable {
     };
   }
 
-  /**
-   * @internal
-   */
   static override [toDeserialized](
     obj: ReturnType<Condvar[typeof toSerialized]>["value"],
   ) {

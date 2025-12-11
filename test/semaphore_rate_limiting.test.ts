@@ -7,7 +7,7 @@ Deno.test("Semaphore Rate Limiting (Sync + 'using')", async () => {
   const sab = new SharedArrayBuffer(4);
   const activeCount = new Int32Array(sab);
 
-  const task = async (s: Semaphore, counter: Int32Array) => {
+  const task = (s: Semaphore, counter: Int32Array) => {
     // Blocks here if 2 people are already inside
     using _guard = s.blockingAcquire();
 

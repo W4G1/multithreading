@@ -52,3 +52,7 @@ export type WorkerTaskPayload = {
 export type WorkerResponsePayload =
   | { type: "RESULT"; taskId: number; result: Envelope }
   | { type: "ERROR"; taskId: number; error: string; stack?: string };
+
+export type UserFunction = (
+  ...args: unknown[]
+) => Promise<unknown> | unknown;

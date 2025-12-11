@@ -1,14 +1,14 @@
 import { getCallerLocation } from "./caller_location.ts";
 import { patchDynamicImports } from "./patch_import.ts";
 import { WorkerPool } from "./pool.ts";
-import type { JoinHandle, Result, ThreadTask } from "./types.ts";
+import type { JoinHandle, Result, ThreadTask, UserFunction } from "./types.ts";
 import { checkMoveArgs } from "./check_move_args.ts";
 
 export * from "./sync/mod.ts";
 export { SharedJsonBuffer } from "./json_buffer.ts";
 
 let globalPool: WorkerPool | null = null;
-const functionIdCache = new WeakMap<Function, string>();
+const functionIdCache = new WeakMap<UserFunction, string>();
 let globalConfig = { maxWorkers: navigator.hardwareConcurrency || 4 };
 
 export function initRuntime(config: { maxWorkers: number }) {
@@ -64,7 +64,7 @@ export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
   >();
 
   let args: any[] = [];
-  let fn: Function;
+  let fn: UserFunction;
 
   // Runtime Logic: Keeps checking for the Symbol
   if (arg1 && Object.prototype.hasOwnProperty.call(arg1, moveTag)) {

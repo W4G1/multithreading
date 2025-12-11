@@ -25,6 +25,12 @@
     // "noUnusedParameters": true,
     "checkJs": true,
     "lib": ["deno.window", "deno.worker" /*, "deno.unstable"*/]
+  },
+  "lint": {
+    "rules": {
+      "include": [],
+      "exclude": ["no-explicit-any", "no-unused-vars"]
+    }
   }
   // "unstable": ["raw-imports", "worker-options", "cron"]
 }

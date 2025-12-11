@@ -211,6 +211,8 @@ await Deno.writeTextFile(
 try {
   await Deno.copyFile("LICENSE.md", path.join(OUT_DIR, "LICENSE.md"));
   await Deno.copyFile("README.md", path.join(OUT_DIR, "README.md"));
-} catch (e) {}
+} catch (e) {
+  console.error(e);
+}
 
 console.log("[Build] Success!");
