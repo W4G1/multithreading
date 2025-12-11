@@ -17,6 +17,7 @@ export interface RwLockController {
 }
 
 const IDX_LOCK_STATE = 0;
+
 const UNLOCKED = 0;
 const WRITE_LOCKED = -1;
 const READ_ONE = 1;

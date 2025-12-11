@@ -13,6 +13,7 @@ export const INTERNAL_MUTEX_CONTROLLER = Symbol(
 );
 
 const IDX_LOCK_STATE = 0;
+
 const LOCKED = 1;
 const UNLOCKED = 0;
 

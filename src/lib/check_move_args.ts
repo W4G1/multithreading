@@ -1,4 +1,12 @@
-import { Condvar, Mutex, Receiver, RwLock, Semaphore, Sender } from "./lib.ts";
+import {
+  Barrier,
+  Condvar,
+  Mutex,
+  Receiver,
+  RwLock,
+  Semaphore,
+  Sender,
+} from "./lib.ts";
 import { toSerialized } from "./shared.ts";
 
 export function checkMoveArgs(args: any[]) {
@@ -9,7 +17,8 @@ export function checkMoveArgs(args: any[]) {
       arg.buffer instanceof SharedArrayBuffer;
     const isThreadSafe = arg instanceof Mutex || arg instanceof Condvar ||
       arg instanceof RwLock || arg instanceof Sender ||
-      arg instanceof Receiver || arg instanceof Semaphore;
+      arg instanceof Receiver || arg instanceof Semaphore ||
+      arg instanceof Barrier;
     const isLibrarySAB = !isThreadSafe &&
       typeof arg[toSerialized] !== "undefined";
 

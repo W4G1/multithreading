@@ -8,6 +8,7 @@ import {
 import type { SharedMemoryView } from "../types.ts";
 
 const IDX_NOTIFY_SEQ = 0;
+
 const SEQ_INCREMENT = 1;
 const NOTIFY_ONE = 1;
 const NOTIFY_ALL = Infinity;

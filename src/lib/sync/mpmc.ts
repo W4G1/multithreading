@@ -16,6 +16,7 @@ const IDX_CLOSED = 2;
 const IDX_CAP = 3;
 const IDX_TX_COUNT = 4;
 const IDX_RX_COUNT = 5;
+
 const META_SIZE = 6;
 
 const OPEN = 0;

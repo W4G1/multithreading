@@ -282,6 +282,39 @@ spawn(move(mutex, cv), async (mutex, cv) => {
 });
 ```
 
+### 5\. Barrier
+
+A `Barrier` acts as a synchronization checkpoint. It blocks all participating threads until a specific number (`N`) of threads have reached the barrier. Once the last thread arrives, all threads are released simultaneously.
+
+Barriers are **cyclic**, meaning they automatically reset and can be reused immediately for subsequent phases of work (e.g., in iterative algorithms like simulations).
+
+**Leader Election:** The `wait()` method returns an object `{ isLeader: boolean }`. Exactly **one** thread is guaranteed to be the leader per cycle. This is useful for performing single-threaded setup or cleanup tasks between parallel phases.
+
+```typescript
+import { spawn, move, Barrier } from "multithreading";
+
+const N = 4;
+const barrier = new Barrier(N);
+
+for (let i = 0; i < N; i++) {
+  spawn(move(barrier), async (b) => {
+    // Phase 1
+    console.log("Working on Phase 1...");
+    
+    // Wait for all 4 threads to reach this point
+    const res = await b.wait();
+    
+    // Only one thread runs this code
+    if (res.isLeader) {
+      console.log("All threads finished Phase 1. preparing Phase 2...");
+    }
+    
+    // Phase 2 (All threads start this simultaneously)
+    console.log("Working on Phase 2...");
+  });
+}
+```
+
 -----
 
 ## Channels (MPMC)
@@ -440,6 +473,9 @@ Content-Security-Policy: default-src 'self'; worker-src 'self' blob:; script-src
       * `notifyOne()`: Wake one waiting thread.
       * `notifyAll()`: Wake all waiting threads.
       * `blockingWait(guard)`: Blocking wait (Halts Worker).
+  * **`Barrier`**:
+      * `wait()`: Async wait (Recommended). Returns `Promise<{ isLeader: boolean }>`.
+      * `blockingWait()`: Blocking wait (Halts Worker). Returns `{ isLeader: boolean }`.
 
 -----
 

@@ -16,6 +16,8 @@ export interface SemaphoreController {
 const IDX_PERMITS = 0;
 const IDX_WAITERS = 1;
 
+const META_SIZE = 2;
+
 export class SemaphoreGuard implements Disposable {
   readonly #amount: number;
   readonly #controller: SemaphoreController;
@@ -60,7 +62,7 @@ export class Semaphore extends Serializable {
       this.#state = new Int32Array(_buffer);
     } else {
       this.#state = new Int32Array(
-        new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2),
+        new SharedArrayBuffer(META_SIZE * Int32Array.BYTES_PER_ELEMENT),
       );
       this.#state[IDX_PERMITS] = initialCount;
       this.#state[IDX_WAITERS] = 0;
