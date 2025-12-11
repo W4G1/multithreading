@@ -1,4 +1,7 @@
 import { move, Mutex, spawn } from "../src/deno/lib.ts";
+import { initRuntime } from "../src/lib/lib.ts";
+
+initRuntime({ maxWorkers: 2 });
 
 Deno.test("Mutex sync", async () => {
   const sharedInt = new Int32Array(

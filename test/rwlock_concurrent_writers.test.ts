@@ -1,5 +1,11 @@
 import { assertEquals } from "@std/assert";
 import { move, RwLock, spawn } from "../src/deno/lib.ts";
+import { initRuntime } from "../src/lib/lib.ts";
+
+const THREAD_COUNT = 4;
+const INCREMENTS_PER_THREAD = 50;
+
+initRuntime({ maxWorkers: 4 });
 
 Deno.test("RwLock: Concurrent Writers (Data Integrity Check)", async () => {
   // 1. Setup Shared Memory
@@ -12,8 +18,6 @@ Deno.test("RwLock: Concurrent Writers (Data Integrity Check)", async () => {
   const lock = new RwLock(data);
 
   // 2. Define Configuration
-  const THREAD_COUNT = 4;
-  const INCREMENTS_PER_THREAD = 50;
   // Total expected value: 200 (fits within Uint8 range of 0-255)
 
   // 3. Define Worker Task

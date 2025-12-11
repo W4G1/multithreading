@@ -1,5 +1,8 @@
 import { assertLess } from "@std/assert";
 import { move, Semaphore, spawn } from "../src/deno/lib.ts";
+import { initRuntime } from "../src/lib/lib.ts";
+
+initRuntime({ maxWorkers: 3 });
 
 Deno.test("Semaphore Rate Limiting (Sync + 'using')", async () => {
   // Allow 2 threads at once.

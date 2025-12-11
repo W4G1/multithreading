@@ -1,5 +1,8 @@
 import { assert, assertEquals } from "@std/assert";
 import { Barrier, move, spawn } from "../src/deno/lib.ts";
+import { initRuntime } from "../src/lib/lib.ts";
+
+initRuntime({ maxWorkers: 8 });
 
 Deno.test("Barrier: Basic Rendezvous (N=3)", async () => {
   const barrier = new Barrier(3);
