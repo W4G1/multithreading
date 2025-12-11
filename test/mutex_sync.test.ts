@@ -1,8 +1,9 @@
 import { move, Mutex, spawn } from "../src/deno/lib.ts";
 
 Deno.test("Mutex sync", async () => {
-  const sab = new SharedArrayBuffer(4);
-  const sharedInt = new Int32Array(sab);
+  const sharedInt = new Int32Array(
+    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT),
+  );
   const mutex = new Mutex(sharedInt);
 
   const handle1 = spawn(move(mutex), (lock) => {

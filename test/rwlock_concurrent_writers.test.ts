@@ -4,8 +4,9 @@ import { move, RwLock, spawn } from "../src/deno/lib.ts";
 Deno.test("RwLock: Concurrent Writers (Data Integrity Check)", async () => {
   // 1. Setup Shared Memory
   // We use a Uint8Array. We will increment the byte at index 0.
-  const buffer = new SharedArrayBuffer(1);
-  const data = new Uint8Array(buffer);
+  const data = new Uint8Array(
+    new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT),
+  );
   data[0] = 0;
 
   const lock = new RwLock(data);

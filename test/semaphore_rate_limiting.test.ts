@@ -4,8 +4,9 @@ import { move, Semaphore, spawn } from "../src/deno/lib.ts";
 Deno.test("Semaphore Rate Limiting (Sync + 'using')", async () => {
   // Allow 2 threads at once.
   const sem = new Semaphore(2);
-  const sab = new SharedArrayBuffer(4);
-  const activeCount = new Int32Array(sab);
+  const activeCount = new Int32Array(
+    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT),
+  );
 
   const task = (s: Semaphore, counter: Int32Array) => {
     // Blocks here if 2 people are already inside

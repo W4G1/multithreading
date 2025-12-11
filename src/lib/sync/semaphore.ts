@@ -9,48 +9,40 @@ export const INTERNAL_SEMAPHORE_CONTROLLER = Symbol(
   "Thread.InternalSemaphoreController",
 );
 
-// Defines the capabilities hidden from the user but available to the Guard
 export interface SemaphoreController {
   release(amount: number): void;
 }
 
+const IDX_PERMITS = 0;
+const IDX_WAITERS = 1;
+
 export class SemaphoreGuard implements Disposable {
-  #amount: number;
+  readonly #amount: number;
+  readonly #controller: SemaphoreController;
   #released = false;
-  [INTERNAL_SEMAPHORE_CONTROLLER]!: SemaphoreController;
 
   constructor(amount: number, controller: SemaphoreController) {
     this.#amount = amount;
-    this.#released = false;
-
-    Object.defineProperty(this, INTERNAL_SEMAPHORE_CONTROLLER, {
-      value: controller,
-      writable: false,
-      enumerable: false,
-      configurable: false,
-    });
+    this.#controller = controller;
   }
 
-  /**
-   * Returns the number of permits held by this guard.
-   */
+  get [INTERNAL_SEMAPHORE_CONTROLLER](): SemaphoreController {
+    return this.#controller;
+  }
+
   get amount(): number {
     return this.#amount;
   }
 
-  [Symbol.dispose]() {
+  [Symbol.dispose](): void {
     if (!this.#released) {
-      const controller = this[INTERNAL_SEMAPHORE_CONTROLLER];
-      controller.release(this.#amount);
       this.#released = true;
+      this.#controller.release(this.#amount);
     }
   }
 
-  /**
-   * Releases the permits held by this guard.
-   */
-  dispose() {
-    return this[Symbol.dispose]();
+  dispose(): void {
+    this[Symbol.dispose]();
   }
 }
 
@@ -59,118 +51,105 @@ export class Semaphore extends Serializable {
     register(3, this);
   }
 
-  /**
-   * Int32Array structure:
-   * [0]: value (The current number of permits available)
-   * [1]: waiters (The number of threads currently waiting)
-   */
-  #state: Int32Array<SharedArrayBuffer>;
-  [INTERNAL_SEMAPHORE_CONTROLLER]!: SemaphoreController;
+  readonly #state: Int32Array<SharedArrayBuffer>;
+  readonly #controller: SemaphoreController;
 
   constructor(initialCount: number, _buffer?: SharedArrayBuffer) {
     super();
     if (_buffer) {
       this.#state = new Int32Array(_buffer);
     } else {
-      this.#state = new Int32Array(new SharedArrayBuffer(8));
-      this.#state[0] = initialCount;
-      this.#state[1] = 0;
+      this.#state = new Int32Array(
+        new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2),
+      );
+      this.#state[IDX_PERMITS] = initialCount;
+      this.#state[IDX_WAITERS] = 0;
     }
-
-    Object.defineProperty(this, INTERNAL_SEMAPHORE_CONTROLLER, {
-      value: this.#createController(),
-      writable: false,
-      enumerable: false,
-      configurable: false,
-    });
-  }
-
-  #release(amount: number): void {
-    // 1. Return permits to the pool
-    Atomics.add(this.#state, 0, amount);
-
-    // 2. Check if there are waiters
-    const waiters = Atomics.load(this.#state, 1);
-
-    // 3. If there are waiters, wake them up.
-    // We notify 'amount' waiters, as we just added 'amount' permits.
-    if (waiters > 0) {
-      Atomics.notify(this.#state, 0, amount);
-    }
-  }
-
-  #createController(): SemaphoreController {
-    return {
-      release: (amount) => this.#release(amount),
+    this.#controller = {
+      release: (amount: number) => this.#release(amount),
     };
   }
 
+  get [INTERNAL_SEMAPHORE_CONTROLLER](): SemaphoreController {
+    return this.#controller;
+  }
+
   /**
-   * Tries to acquire `amount` permits immediately.
-   * Returns a Guard if successful, null if not.
+   * Internal release logic used by the Controller/Guard
    */
+  #release(amount: number): void {
+    Atomics.add(this.#state, IDX_PERMITS, amount);
+
+    if (Atomics.load(this.#state, IDX_WAITERS) > 0) {
+      Atomics.notify(this.#state, IDX_PERMITS, amount);
+    }
+  }
+
   public tryAcquire(amount = 1): SemaphoreGuard | null {
-    const current = Atomics.load(this.#state, 0);
+    const current = Atomics.load(this.#state, IDX_PERMITS);
+
     if (current >= amount) {
-      if (
-        Atomics.compareExchange(this.#state, 0, current, current - amount) ===
-          current
-      ) {
-        return new SemaphoreGuard(amount, this.#createController());
+      const result = Atomics.compareExchange(
+        this.#state,
+        IDX_PERMITS,
+        current,
+        current - amount,
+      );
+
+      if (result === current) {
+        return new SemaphoreGuard(amount, this.#controller);
       }
     }
     return null;
   }
 
-  /**
-   * Blocks until permits are available, then returns a Disposable Guard.
-   * When the Guard goes out of scope, the permits are released.
-   */
   public blockingAcquire(amount = 1): SemaphoreGuard {
     while (true) {
-      const current = Atomics.load(this.#state, 0);
+      const current = Atomics.load(this.#state, IDX_PERMITS);
 
-      // Try to acquire
       if (current >= amount) {
-        if (
-          Atomics.compareExchange(this.#state, 0, current, current - amount) ===
-            current
-        ) {
-          return new SemaphoreGuard(amount, this.#createController());
+        const result = Atomics.compareExchange(
+          this.#state,
+          IDX_PERMITS,
+          current,
+          current - amount,
+        );
+
+        if (result === current) {
+          return new SemaphoreGuard(amount, this.#controller);
         }
       } else {
-        // Wait logic
-        // Increment waiter count
-        Atomics.add(this.#state, 1, 1);
-        // Wait on index 0 (value) to change
-        Atomics.wait(this.#state, 0, current);
-        // Decrement waiter count
-        Atomics.sub(this.#state, 1, 1);
+        Atomics.add(this.#state, IDX_WAITERS, 1);
+        Atomics.wait(this.#state, IDX_PERMITS, current);
+        Atomics.sub(this.#state, IDX_WAITERS, 1);
       }
     }
   }
 
-  /**
-   * Asynchronously waits for permits, returning a Disposable Guard.
-   */
   public async acquire(amount = 1): Promise<SemaphoreGuard> {
     while (true) {
-      const current = Atomics.load(this.#state, 0);
+      const current = Atomics.load(this.#state, IDX_PERMITS);
 
       if (current >= amount) {
-        if (
-          Atomics.compareExchange(this.#state, 0, current, current - amount) ===
-            current
-        ) {
-          return new SemaphoreGuard(amount, this.#createController());
+        const result = Atomics.compareExchange(
+          this.#state,
+          IDX_PERMITS,
+          current,
+          current - amount,
+        );
+
+        if (result === current) {
+          return new SemaphoreGuard(amount, this.#controller);
         }
       } else {
-        Atomics.add(this.#state, 1, 1);
-        const res = Atomics.waitAsync(this.#state, 0, current);
+        Atomics.add(this.#state, IDX_WAITERS, 1);
+
+        const res = Atomics.waitAsync(this.#state, IDX_PERMITS, current);
         if (res.async) {
           await res.value;
         }
-        Atomics.sub(this.#state, 1, 1);
+
+        Atomics.sub(this.#state, IDX_WAITERS, 1);
       }
     }
   }

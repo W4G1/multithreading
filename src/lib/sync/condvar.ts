@@ -7,6 +7,11 @@ import {
 } from "../shared.ts";
 import type { SharedMemoryView } from "../types.ts";
 
+const IDX_NOTIFY_SEQ = 0;
+const SEQ_INCREMENT = 1;
+const NOTIFY_ONE = 1;
+const NOTIFY_ALL = Infinity;
+
 export class Condvar extends Serializable {
   static {
     register(1, this);
@@ -16,37 +21,35 @@ export class Condvar extends Serializable {
 
   constructor(_buffer?: SharedArrayBuffer) {
     super();
-    if (_buffer) {
-      this.#atomic = new Int32Array(_buffer);
-    } else {
-      this.#atomic = new Int32Array(new SharedArrayBuffer(4));
-    }
+    this.#atomic = new Int32Array(
+      _buffer ?? new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT),
+    );
   }
 
   blockingWait<T extends SharedMemoryView | void>(guard: MutexGuard<T>): void {
     const controller = guard[INTERNAL_MUTEX_CONTROLLER];
-    const seq = Atomics.load(this.#atomic, 0);
+    const seq = Atomics.load(this.#atomic, IDX_NOTIFY_SEQ);
 
     controller.unlock();
 
-    Atomics.wait(this.#atomic, 0, seq);
+    Atomics.wait(this.#atomic, IDX_NOTIFY_SEQ, seq);
 
     controller.blockingLock();
   }
 
   /**
    * Asynchronously waits for a notification. Safe to use on the Main Thread.
-   * * @param guard The MutexGuard protecting the shared state.
+   * @param guard The MutexGuard protecting the shared state.
    */
   async wait<T extends SharedMemoryView | void>(
     guard: MutexGuard<T>,
   ): Promise<void> {
     const controller = guard[INTERNAL_MUTEX_CONTROLLER];
-    const seq = Atomics.load(this.#atomic, 0);
+    const seq = Atomics.load(this.#atomic, IDX_NOTIFY_SEQ);
 
     controller.unlock();
 
-    const result = Atomics.waitAsync(this.#atomic, 0, seq);
+    const result = Atomics.waitAsync(this.#atomic, IDX_NOTIFY_SEQ, seq);
     if (result.async) {
       await result.value;
     }
@@ -58,16 +61,16 @@ export class Condvar extends Serializable {
    * Wakes up one blocked thread waiting on this Condvar.
    */
   notifyOne() {
-    Atomics.add(this.#atomic, 0, 1);
-    Atomics.notify(this.#atomic, 0, 1);
+    Atomics.add(this.#atomic, IDX_NOTIFY_SEQ, SEQ_INCREMENT);
+    Atomics.notify(this.#atomic, IDX_NOTIFY_SEQ, NOTIFY_ONE);
   }
 
   /**
    * Wakes up all blocked threads waiting on this Condvar.
    */
   notifyAll() {
-    Atomics.add(this.#atomic, 0, 1);
-    Atomics.notify(this.#atomic, 0, Infinity);
+    Atomics.add(this.#atomic, IDX_NOTIFY_SEQ, SEQ_INCREMENT);
+    Atomics.notify(this.#atomic, IDX_NOTIFY_SEQ, NOTIFY_ALL);
   }
 
   [toSerialized]() {

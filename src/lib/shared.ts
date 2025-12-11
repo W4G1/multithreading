@@ -53,7 +53,10 @@ export function serialize(arg: any): {
   }
 
   // Library Object (Instance of Serializable)
-  if (typeof arg === "object" && typeof arg[toSerialized] === "function") {
+  if (
+    typeof arg === "object" && arg !== null &&
+    typeof arg[toSerialized] === "function"
+  ) {
     const { value, transfer, typeId } = arg[toSerialized]();
     const Ctor = arg.constructor as SerializableConstructor;
 

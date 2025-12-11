@@ -16,15 +16,15 @@ export interface RwLockController {
   unlock(): void;
 }
 
-const INDEX = 0;
+const IDX_LOCK_STATE = 0;
 const UNLOCKED = 0;
 const WRITE_LOCKED = -1;
 const READ_ONE = 1;
 
 export class RwLockReadGuard<T extends SharedMemoryView | void>
   implements Disposable {
-  #data: T;
-  #controller: RwLockController;
+  readonly #data: T;
+  readonly #controller: RwLockController;
   #released = false;
 
   constructor(data: T, controller: RwLockController) {
@@ -56,7 +56,7 @@ export class RwLockReadGuard<T extends SharedMemoryView | void>
 export class RwLockWriteGuard<T extends SharedMemoryView | void>
   implements Disposable {
   #data: T;
-  #controller: RwLockController;
+  readonly #controller: RwLockController;
   #released = false;
 
   constructor(data: T, controller: RwLockController) {
@@ -96,23 +96,23 @@ export class RwLock<T extends SharedMemoryView | void = void>
   #readController: RwLockController;
   #writeController: RwLockController;
 
-  constructor(data?: T, _existingStateBuffer?: SharedArrayBuffer) {
+  constructor(data?: T, _stateBuffer?: SharedArrayBuffer) {
     super();
     this.#data = data as T;
 
-    this.#lockState = _existingStateBuffer
-      ? new Int32Array(_existingStateBuffer)
-      : new Int32Array(new SharedArrayBuffer(4));
+    this.#lockState = _stateBuffer
+      ? new Int32Array(_stateBuffer)
+      : new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 
     this.#readController = { unlock: () => this.#unlockRead() };
     this.#writeController = { unlock: () => this.#unlockWrite() };
   }
 
   #unlockRead(): void {
-    const prevState = Atomics.sub(this.#lockState, INDEX, READ_ONE);
+    const prevState = Atomics.sub(this.#lockState, IDX_LOCK_STATE, READ_ONE);
     // If we were the last reader (prevState was 1, now 0), notify writers
     if (prevState === READ_ONE) {
-      Atomics.notify(this.#lockState, INDEX, 1);
+      Atomics.notify(this.#lockState, IDX_LOCK_STATE, 1);
     }
   }
 
@@ -120,7 +120,7 @@ export class RwLock<T extends SharedMemoryView | void = void>
     if (
       Atomics.compareExchange(
         this.#lockState,
-        INDEX,
+        IDX_LOCK_STATE,
         WRITE_LOCKED,
         UNLOCKED,
       ) !==
@@ -132,18 +132,18 @@ export class RwLock<T extends SharedMemoryView | void = void>
     }
     // Notify all waiting readers or one waiting writer.
     // We use Infinity because we might have N readers waiting.
-    Atomics.notify(this.#lockState, INDEX, Infinity);
+    Atomics.notify(this.#lockState, IDX_LOCK_STATE, Infinity);
   }
 
   // --- Public API ---
 
   public blockingRead(): RwLockReadGuard<T> {
     while (true) {
-      const current = Atomics.load(this.#lockState, INDEX);
+      const current = Atomics.load(this.#lockState, IDX_LOCK_STATE);
 
       // If write locked (current == -1), wait.
       if (current === WRITE_LOCKED) {
-        Atomics.wait(this.#lockState, INDEX, WRITE_LOCKED);
+        Atomics.wait(this.#lockState, IDX_LOCK_STATE, WRITE_LOCKED);
         continue;
       }
 
@@ -151,7 +151,7 @@ export class RwLock<T extends SharedMemoryView | void = void>
       if (
         Atomics.compareExchange(
           this.#lockState,
-          INDEX,
+          IDX_LOCK_STATE,
           current,
           current + READ_ONE,
         ) === current
@@ -163,10 +163,14 @@ export class RwLock<T extends SharedMemoryView | void = void>
 
   public async read(): Promise<RwLockReadGuard<T>> {
     while (true) {
-      const current = Atomics.load(this.#lockState, INDEX);
+      const current = Atomics.load(this.#lockState, IDX_LOCK_STATE);
 
       if (current === WRITE_LOCKED) {
-        const res = Atomics.waitAsync(this.#lockState, INDEX, WRITE_LOCKED);
+        const res = Atomics.waitAsync(
+          this.#lockState,
+          IDX_LOCK_STATE,
+          WRITE_LOCKED,
+        );
         if (res.async) {
           await res.value;
         }
@@ -176,7 +180,7 @@ export class RwLock<T extends SharedMemoryView | void = void>
       if (
         Atomics.compareExchange(
           this.#lockState,
-          INDEX,
+          IDX_LOCK_STATE,
           current,
           current + READ_ONE,
         ) === current
@@ -188,17 +192,17 @@ export class RwLock<T extends SharedMemoryView | void = void>
 
   public blockingWrite(): RwLockWriteGuard<T> {
     while (true) {
-      const current = Atomics.load(this.#lockState, INDEX);
+      const current = Atomics.load(this.#lockState, IDX_LOCK_STATE);
       // Can only write if strictly UNLOCKED (0).
       if (current !== UNLOCKED) {
-        Atomics.wait(this.#lockState, INDEX, current);
+        Atomics.wait(this.#lockState, IDX_LOCK_STATE, current);
         continue;
       }
 
       if (
         Atomics.compareExchange(
           this.#lockState,
-          INDEX,
+          IDX_LOCK_STATE,
           UNLOCKED,
           WRITE_LOCKED,
         ) ===
@@ -211,9 +215,9 @@ export class RwLock<T extends SharedMemoryView | void = void>
 
   public async write(): Promise<RwLockWriteGuard<T>> {
     while (true) {
-      const current = Atomics.load(this.#lockState, INDEX);
+      const current = Atomics.load(this.#lockState, IDX_LOCK_STATE);
       if (current !== UNLOCKED) {
-        const res = Atomics.waitAsync(this.#lockState, INDEX, current);
+        const res = Atomics.waitAsync(this.#lockState, IDX_LOCK_STATE, current);
         if (res.async) {
           await res.value;
         }
@@ -223,7 +227,7 @@ export class RwLock<T extends SharedMemoryView | void = void>
       if (
         Atomics.compareExchange(
           this.#lockState,
-          INDEX,
+          IDX_LOCK_STATE,
           UNLOCKED,
           WRITE_LOCKED,
         ) ===

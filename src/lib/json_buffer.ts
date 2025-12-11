@@ -53,7 +53,7 @@ function initConsoleHooks() {
         const arg = args[i];
         // Check if it's our object and has the specific console view method
         if (
-          arg && typeof arg === "object" &&
+          typeof arg === "object" &&
           typeof arg[CONSOLE_VIEW] === "function"
         ) {
           try {
@@ -78,16 +78,16 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
   }
 
   // Views
-  public _u32!: Uint32Array;
-  public _f64!: Float64Array;
-  public _u8!: Uint8Array;
+  public u32!: Uint32Array;
+  public f64!: Float64Array;
+  public u8!: Uint8Array;
 
   private buffer!: SharedArrayBuffer;
-  private _textDecoder = new TextDecoder();
-  private _textEncoder = new TextEncoder();
+  private textDecoder = new TextDecoder();
+  private textEncoder = new TextEncoder();
 
   // Caches
-  private _stringCache = new Map<number, string>();
+  private stringCache = new Map<number, string>();
   private proxyCache = new Map<number, WeakRef<any>>();
   private propertyHints = new Map<string, number>();
 
@@ -96,10 +96,10 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
   private tempRoots: StackRoot[] = [];
 
   // Instance Scratch Variables
-  public s_ptr = 0; // Public for ArrayCursor access
-  public s_cap = 0;
-  public s_len = 0;
-  public s_start = 0;
+  public scratchPtr = 0; // Public for ArrayCursor access
+  public scratchCap = 0;
+  public scratchLen = 0;
+  public scratchStart = 0;
 
   constructor(initial: T, options?: { size?: number });
   constructor(initial: T, buffer: SharedArrayBuffer);
@@ -112,7 +112,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       this.buffer = optionsOrBuffer;
       this.initViews();
 
-      if (Atomics.load(this._u32, OFFSET_FREE_PTR >> 2) === 0) {
+      if (Atomics.load(this.u32, OFFSET_FREE_PTR >> 2) === 0) {
         this.initializeBuffer(obj);
       }
     } else {
@@ -126,13 +126,13 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
   }
 
   private initViews() {
-    this._u32 = new Uint32Array(this.buffer);
-    this._f64 = new Float64Array(this.buffer);
-    this._u8 = new Uint8Array(this.buffer);
+    this.u32 = new Uint32Array(this.buffer);
+    this.f64 = new Float64Array(this.buffer);
+    this.u8 = new Uint8Array(this.buffer);
   }
 
   private initializeBuffer(obj: T) {
-    Atomics.store(this._u32, OFFSET_FREE_PTR >> 2, HEADER_SIZE);
+    Atomics.store(this.u32, OFFSET_FREE_PTR >> 2, HEADER_SIZE);
 
     const isArr = Array.isArray(obj);
     const initialKeys = isArr
@@ -143,7 +143,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       ? this.allocArray(initialKeys)
       : this.allocObject(initialKeys);
 
-    Atomics.store(this._u32, OFFSET_ROOT >> 2, rootPtr);
+    Atomics.store(this.u32, OFFSET_ROOT >> 2, rootPtr);
 
     if (obj) {
       const rootTarget = { __ptr: rootPtr };
@@ -155,19 +155,19 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
         this.writeInitial(rootTarget, obj);
       } finally {
         this.tempRoots.pop();
-        Atomics.store(this._u32, OFFSET_ROOT >> 2, rootTarget.__ptr);
+        Atomics.store(this.u32, OFFSET_ROOT >> 2, rootTarget.__ptr);
       }
     }
   }
 
   private getRootProxy(): any {
-    const rootPtr = Atomics.load(this._u32, OFFSET_ROOT >> 2);
+    const rootPtr = Atomics.load(this.u32, OFFSET_ROOT >> 2);
     return this.getProxyForPtr(rootPtr);
   }
 
   private alloc(byteSize: number, retry = true): number {
     const idx = OFFSET_FREE_PTR >> 2;
-    const currentPtr = Atomics.load(this._u32, idx);
+    const currentPtr = Atomics.load(this.u32, idx);
 
     // Align to 8 bytes for Float64 performance
     const nextPtr = currentPtr + byteSize;
@@ -184,7 +184,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       );
     }
 
-    Atomics.store(this._u32, idx, alignedNext);
+    Atomics.store(this.u32, idx, alignedNext);
     return currentPtr;
   }
 
@@ -211,11 +211,11 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
       if (type === TYPE_STRING) {
         if (visited.has(oldPtr)) return visited.get(oldPtr)!;
-        const len = this._u32[oldPtr >> 2]!;
+        const len = this.u32[oldPtr >> 2]!;
         const newPtr = allocTemp(4 + len);
         tempU32[newPtr >> 2] = len;
         tempU8.set(
-          this._u8.subarray(oldPtr + 4, oldPtr + 4 + len),
+          this.u8.subarray(oldPtr + 4, oldPtr + 4 + len),
           newPtr + 4,
         );
         visited.set(oldPtr, newPtr);
@@ -225,21 +225,21 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       if (type === TYPE_NUMBER) {
         if (visited.has(oldPtr)) return visited.get(oldPtr)!;
         const newPtr = allocTemp(8);
-        tempF64[newPtr >> 3] = this._f64[oldPtr >> 3]!;
+        tempF64[newPtr >> 3] = this.f64[oldPtr >> 3]!;
         visited.set(oldPtr, newPtr);
         return newPtr;
       }
 
       this.resolvePtr(oldPtr);
-      const actualOldPtr = this.s_ptr;
+      const actualOldPtr = this.scratchPtr;
 
       if (visited.has(actualOldPtr)) return visited.get(actualOldPtr)!;
 
-      const actualType = this._u32[actualOldPtr >> 2]!;
+      const actualType = this.u32[actualOldPtr >> 2]!;
       let newPtr = 0;
 
       if (actualType === TYPE_OBJECT) {
-        const count = this._u32[(actualOldPtr + 8) >> 2]!;
+        const count = this.u32[(actualOldPtr + 8) >> 2]!;
         const newCap = Math.max(4, count);
         newPtr = allocTemp(12 + newCap * 12);
 
@@ -252,9 +252,9 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
         for (let i = 0; i < count; i++) {
           const entryOff = startOffset + i * 12;
-          const kPtr = this._u32[entryOff >> 2]!;
-          const vType = this._u32[(entryOff + 4) >> 2]!;
-          const vPayload = this._u32[(entryOff + 8) >> 2]!;
+          const kPtr = this.u32[entryOff >> 2]!;
+          const vType = this.u32[(entryOff + 4) >> 2]!;
+          const vPayload = this.u32[(entryOff + 8) >> 2]!;
 
           const newKeyPtr = relocate(kPtr, TYPE_STRING);
 
@@ -272,7 +272,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
           tempU32[(destOff + 8) >> 2] = newPayload;
         }
       } else if (actualType === TYPE_ARRAY) {
-        const len = this._u32[(actualOldPtr + 8) >> 2]!;
+        const len = this.u32[(actualOldPtr + 8) >> 2]!;
         const newCap = Math.max(4, len);
         newPtr = allocTemp(12 + newCap * 8);
 
@@ -285,8 +285,8 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
         for (let i = 0; i < len; i++) {
           const entryOff = startOffset + i * 8;
-          const vType = this._u32[entryOff >> 2]!;
-          const vPayload = this._u32[(entryOff + 4) >> 2]!;
+          const vType = this.u32[entryOff >> 2]!;
+          const vPayload = this.u32[(entryOff + 4) >> 2]!;
 
           let newPayload = vPayload;
           if (
@@ -306,25 +306,25 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       return newPtr;
     };
 
-    const oldRoot = Atomics.load(this._u32, OFFSET_ROOT >> 2);
+    const oldRoot = Atomics.load(this.u32, OFFSET_ROOT >> 2);
     const newRoot = relocate(oldRoot, TYPE_OBJECT);
 
     for (const root of this.tempRoots) {
       relocate(root.handle.__ptr, root.type);
     }
 
-    this._u8.set(new Uint8Array(tempBuffer).subarray(0, freePtr), 0);
+    this.u8.set(new Uint8Array(tempBuffer).subarray(0, freePtr), 0);
 
-    Atomics.store(this._u32, OFFSET_FREE_PTR >> 2, freePtr);
-    Atomics.store(this._u32, OFFSET_ROOT >> 2, newRoot);
+    Atomics.store(this.u32, OFFSET_FREE_PTR >> 2, freePtr);
+    Atomics.store(this.u32, OFFSET_ROOT >> 2, newRoot);
 
-    this._stringCache.clear();
+    this.stringCache.clear();
     this.proxyCache.clear();
     this.propertyHints.clear();
 
     const fixupPointer = (target: Pointer) => {
       this.resolvePtr(target.__ptr);
-      const oldP = this.s_ptr;
+      const oldP = this.scratchPtr;
       if (visited.has(oldP)) {
         target.__ptr = visited.get(oldP)!;
       } else {
@@ -342,31 +342,31 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
   public resolvePtr(ptr: number) {
     if (ptr === 0) {
-      this.s_ptr = 0;
-      this.s_len = 0;
+      this.scratchPtr = 0;
+      this.scratchLen = 0;
       return;
     }
 
     let curr = ptr;
-    let type = this._u32[curr >> 2]!;
+    let type = this.u32[curr >> 2]!;
 
     while (type === TYPE_MOVED) {
-      curr = this._u32[(curr + 4) >> 2]!;
-      type = this._u32[curr >> 2]!;
+      curr = this.u32[(curr + 4) >> 2]!;
+      type = this.u32[curr >> 2]!;
     }
 
-    this.s_ptr = curr;
-    this.s_cap = this._u32[(curr + 4) >> 2]!;
-    this.s_len = this._u32[(curr + 8) >> 2]!;
-    this.s_start = curr + 12;
+    this.scratchPtr = curr;
+    this.scratchCap = this.u32[(curr + 4) >> 2]!;
+    this.scratchLen = this.u32[(curr + 8) >> 2]!;
+    this.scratchStart = curr + 12;
   }
 
   private readString(ptr: number): string {
-    if (this._stringCache.has(ptr)) {
-      return this._stringCache.get(ptr)!;
+    if (this.stringCache.has(ptr)) {
+      return this.stringCache.get(ptr)!;
     }
 
-    const len = this._u32[ptr >> 2]!;
+    const len = this.u32[ptr >> 2]!;
     const offset = ptr + 4;
 
     // Optimization: Short strings usually fit in stack/args limit
@@ -374,26 +374,26 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     if (len < 64) {
       let res = "";
       for (let i = 0; i < len; i++) {
-        res += String.fromCharCode(this._u8[offset + i]!);
+        res += String.fromCharCode(this.u8[offset + i]!);
       }
-      this._stringCache.set(ptr, res);
+      this.stringCache.set(ptr, res);
       return res;
     }
 
     // Fallback for long strings or special chars
-    const str = this._textDecoder.decode(
-      this._u8.subarray(offset, offset + len),
+    const str = this.textDecoder.decode(
+      this.u8.subarray(offset, offset + len),
     );
-    this._stringCache.set(ptr, str);
+    this.stringCache.set(ptr, str);
     return str;
   }
 
   public readSlot(offset: number): any {
-    const type = this._u32[offset >> 2]!;
-    const payload = this._u32[(offset + 4) >> 2]!;
+    const type = this.u32[offset >> 2]!;
+    const payload = this.u32[(offset + 4) >> 2]!;
 
     if (type === TYPE_NUMBER) {
-      return this._f64[payload >> 3]!;
+      return this.f64[payload >> 3]!;
     }
 
     switch (type) {
@@ -416,7 +416,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
   private writeValue(value: any): { type: number; payload: number } {
     if (typeof value === "number") {
       const ptr = this.alloc(8);
-      this._f64[ptr >> 3] = value;
+      this.f64[ptr >> 3] = value;
       return { type: TYPE_NUMBER, payload: ptr };
     }
     if (value === null || value === undefined) {
@@ -426,12 +426,12 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     if (value === false) return { type: TYPE_FALSE, payload: 0 };
 
     if (typeof value === "string") {
-      const encoded = this._textEncoder.encode(value);
+      const encoded = this.textEncoder.encode(value);
       const len = encoded.byteLength;
       const ptr = this.alloc(4 + len);
 
-      this._u32[ptr >> 2] = len;
-      this._u8.set(encoded, ptr + 4);
+      this.u32[ptr >> 2] = len;
+      this.u8.set(encoded, ptr + 4);
       return { type: TYPE_STRING, payload: ptr };
     }
 
@@ -468,9 +468,9 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     const byteSize = 12 + capacity * 12;
     const ptr = this.alloc(byteSize);
     const idx = ptr >> 2;
-    this._u32[idx] = TYPE_OBJECT;
-    this._u32[idx + 1] = capacity;
-    this._u32[idx + 2] = 0;
+    this.u32[idx] = TYPE_OBJECT;
+    this.u32[idx + 1] = capacity;
+    this.u32[idx + 2] = 0;
     return ptr;
   }
 
@@ -479,9 +479,9 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     const byteSize = 12 + capacity * 8;
     const ptr = this.alloc(byteSize);
     const idx = ptr >> 2;
-    this._u32[idx] = TYPE_ARRAY;
-    this._u32[idx + 1] = capacity;
-    this._u32[idx + 2] = 0;
+    this.u32[idx] = TYPE_ARRAY;
+    this.u32[idx + 1] = capacity;
+    this.u32[idx + 2] = 0;
     return ptr;
   }
 
@@ -511,22 +511,22 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
       // Standard resolution
       const curr = ptr;
-      const type = this._u32[curr >> 2]!;
+      const type = this.u32[curr >> 2]!;
       if (type !== TYPE_MOVED) {
-        this.s_len = this._u32[(curr + 8) >> 2]!;
-        this.s_start = curr + 12;
+        this.scratchLen = this.u32[(curr + 8) >> 2]!;
+        this.scratchStart = curr + 12;
       } else {
         this.resolvePtr(ptr);
       }
 
-      const count = this.s_len;
-      const start = this.s_start;
+      const count = this.scratchLen;
+      const start = this.scratchStart;
 
       // Check hint
       const hint = this.propertyHints.get(String(prop));
       if (hint !== undefined && hint < count) {
         const entryOffset = start + hint * 12;
-        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyPtr = this.u32[entryOffset >> 2]!;
         const keyStr = this.readString(keyPtr);
         if (keyStr === prop) return this.readSlot(entryOffset + 4);
       }
@@ -534,7 +534,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       // Scan
       for (let i = 0; i < count; i++) {
         const entryOffset = start + i * 12;
-        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyPtr = this.u32[entryOffset >> 2]!;
         const key = this.readString(keyPtr);
 
         if (key === prop) {
@@ -556,14 +556,14 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       if (target.__ptr === 0) return false;
 
       const propStr = String(prop);
-      const count = this.s_len;
-      const start = this.s_start;
+      const count = this.scratchLen;
+      const start = this.scratchStart;
 
       // Check hint
       const hint = this.propertyHints.get(propStr);
       if (hint !== undefined && hint < count) {
         const entryOffset = start + hint * 12;
-        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyPtr = this.u32[entryOffset >> 2]!;
         const keyStr = this.readString(keyPtr);
         if (keyStr === propStr) return true;
       }
@@ -571,7 +571,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       // Scan
       for (let i = 0; i < count; i++) {
         const entryOffset = start + i * 12;
-        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyPtr = this.u32[entryOffset >> 2]!;
         const key = this.readString(keyPtr);
 
         if (key === propStr) {
@@ -613,11 +613,11 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       if (target.__ptr === 0) return [];
 
       const keys: string[] = [];
-      const start = this.s_start;
+      const start = this.scratchStart;
 
       // Pre-fill hints during iteration
-      for (let i = 0; i < this.s_len; i++) {
-        const keyPtr = this._u32[(start + i * 12) >> 2]!;
+      for (let i = 0; i < this.scratchLen; i++) {
+        const keyPtr = this.u32[(start + i * 12) >> 2]!;
         const key = this.readString(keyPtr);
 
         // When GOPD is called immediately after, it will hit this hint.
@@ -633,15 +633,15 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       this.resolvePtr(target.__ptr);
       if (target.__ptr === 0) return undefined;
 
-      const count = this.s_len;
-      const start = this.s_start;
+      const count = this.scratchLen;
+      const start = this.scratchStart;
       const propStr = String(prop);
 
       // 2. Check hint
       const hint = this.propertyHints.get(propStr);
       if (hint !== undefined && hint < count) {
         const entryOffset = start + hint * 12;
-        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyPtr = this.u32[entryOffset >> 2]!;
         const keyStr = this.readString(keyPtr);
 
         if (keyStr === propStr) {
@@ -659,7 +659,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       // 3. Scan
       for (let i = 0; i < count; i++) {
         const entryOffset = start + i * 12;
-        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyPtr = this.u32[entryOffset >> 2]!;
         const key = this.readString(keyPtr);
 
         if (key === propStr) {
@@ -681,7 +681,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
   private getProxyForPtr(ptr: number): any {
     this.resolvePtr(ptr);
-    const resolvedPtr = this.s_ptr;
+    const resolvedPtr = this.scratchPtr;
 
     // Check cache
     if (this.proxyCache.has(resolvedPtr)) {
@@ -690,7 +690,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       if (cached) return cached; // Return if still in memory
     }
 
-    const type = this._u32[resolvedPtr >> 2]!;
+    const type = this.u32[resolvedPtr >> 2]!;
 
     // Initialize proper target for formatting
     const target = type === TYPE_ARRAY ? [] : {};
@@ -717,9 +717,9 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
   public toConsoleView(ptr: number, depth = 0): any {
     this.resolvePtr(ptr);
-    const len = this.s_len;
-    const start = this.s_start;
-    const type = this._u32[this.s_ptr >> 2]!;
+    const len = this.scratchLen;
+    const start = this.scratchStart;
+    const type = this.u32[this.scratchPtr >> 2]!;
 
     const result: any = type === TYPE_ARRAY ? new Array(len) : {};
 
@@ -736,13 +736,13 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
         offset = start + i * 8;
       } else {
         const entryOffset = start + i * 12;
-        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyPtr = this.u32[entryOffset >> 2]!;
         key = this.readString(keyPtr);
         offset = entryOffset + 4;
       }
 
-      const itemType = this._u32[offset >> 2]!;
-      const itemPayload = this._u32[(offset + 4) >> 2]!;
+      const itemType = this.u32[offset >> 2]!;
+      const itemPayload = this.u32[(offset + 4) >> 2]!;
 
       if (itemType === TYPE_OBJECT || itemType === TYPE_ARRAY) {
         // Eager vs lazy decision
@@ -773,16 +773,16 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
   public toJSON(ptr: number): any {
     this.resolvePtr(ptr);
-    const len = this.s_len;
-    const start = this.s_start;
-    const type = this._u32[this.s_ptr >> 2]!;
+    const len = this.scratchLen;
+    const start = this.scratchStart;
+    const type = this.u32[this.scratchPtr >> 2]!;
 
     if (type === TYPE_ARRAY) {
       const arr = new Array(len);
       for (let i = 0; i < len; i++) {
         const offset = start + i * 8;
-        const itemType = this._u32[offset >> 2]!;
-        const itemPayload = this._u32[(offset + 4) >> 2]!;
+        const itemType = this.u32[offset >> 2]!;
+        const itemPayload = this.u32[(offset + 4) >> 2]!;
 
         if (itemType === TYPE_OBJECT || itemType === TYPE_ARRAY) {
           arr[i] = this.toJSON(itemPayload);
@@ -795,11 +795,11 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       const obj: any = {};
       for (let i = 0; i < len; i++) {
         const entryOffset = start + i * 12;
-        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyPtr = this.u32[entryOffset >> 2]!;
         const key = this.readString(keyPtr);
 
-        const itemType = this._u32[(entryOffset + 4) >> 2]!;
-        const itemPayload = this._u32[(entryOffset + 8) >> 2]!;
+        const itemType = this.u32[(entryOffset + 4) >> 2]!;
+        const itemPayload = this.u32[(entryOffset + 8) >> 2]!;
 
         if (itemType === TYPE_OBJECT || itemType === TYPE_ARRAY) {
           obj[key] = this.toJSON(itemPayload);
@@ -813,15 +813,15 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
   private objectDelete(target: Pointer, key: string): boolean {
     this.resolvePtr(target.__ptr);
-    const ptr = this.s_ptr;
-    const count = this.s_len;
-    const entriesStart = this.s_start;
+    const ptr = this.scratchPtr;
+    const count = this.scratchLen;
+    const entriesStart = this.scratchStart;
 
     let foundIdx = -1;
 
     for (let i = 0; i < count; i++) {
       const entryOffset = entriesStart + i * 12;
-      const keyPtr = this._u32[entryOffset >> 2]!;
+      const keyPtr = this.u32[entryOffset >> 2]!;
       if (this.readString(keyPtr) === key) {
         foundIdx = i;
         break;
@@ -836,26 +836,26 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       const lastOffset = entriesStart + lastIdx * 12;
       const foundOffset = entriesStart + foundIdx * 12;
 
-      this._u32[foundOffset >> 2] = this._u32[lastOffset >> 2]!;
-      this._u32[(foundOffset + 4) >> 2] = this._u32[(lastOffset + 4) >> 2]!;
-      this._u32[(foundOffset + 8) >> 2] = this._u32[(lastOffset + 8) >> 2]!;
+      this.u32[foundOffset >> 2] = this.u32[lastOffset >> 2]!;
+      this.u32[(foundOffset + 4) >> 2] = this.u32[(lastOffset + 4) >> 2]!;
+      this.u32[(foundOffset + 8) >> 2] = this.u32[(lastOffset + 8) >> 2]!;
     }
 
-    this._u32[(ptr + 8) >> 2] = count - 1;
+    this.u32[(ptr + 8) >> 2] = count - 1;
     return true;
   }
 
   private objectSet(target: Pointer, key: string, value: any) {
     this.resolvePtr(target.__ptr);
-    const preScanLen = this.s_len;
-    const preScanStart = this.s_start;
+    const preScanLen = this.scratchLen;
+    const preScanStart = this.scratchStart;
 
     for (let i = 0; i < preScanLen; i++) {
       const entryOffset = preScanStart + i * 12;
-      const keyPtr = this._u32[entryOffset >> 2]!;
+      const keyPtr = this.u32[entryOffset >> 2]!;
       if (this.readString(keyPtr) === key) {
-        this._u32[(entryOffset + 4) >> 2] = TYPE_NULL;
-        this._u32[(entryOffset + 8) >> 2] = 0;
+        this.u32[(entryOffset + 4) >> 2] = TYPE_NULL;
+        this.u32[(entryOffset + 8) >> 2] = 0;
         break;
       }
     }
@@ -871,17 +871,17 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
     try {
       this.resolvePtr(target.__ptr);
-      let ptr = this.s_ptr;
-      const entriesStart = this.s_start;
-      const count = this.s_len;
-      const cap = this.s_cap;
+      let ptr = this.scratchPtr;
+      const entriesStart = this.scratchStart;
+      const count = this.scratchLen;
+      const cap = this.scratchCap;
 
       for (let i = 0; i < count; i++) {
         const entryOffset = entriesStart + i * 12;
-        const keyPtr = this._u32[entryOffset >> 2]!;
+        const keyPtr = this.u32[entryOffset >> 2]!;
         if (this.readString(keyPtr) === key) {
-          this._u32[(entryOffset + 4) >> 2] = valResult.type;
-          this._u32[(entryOffset + 8) >> 2] = valHandle.__ptr;
+          this.u32[(entryOffset + 4) >> 2] = valResult.type;
+          this.u32[(entryOffset + 8) >> 2] = valHandle.__ptr;
           return;
         }
       }
@@ -892,9 +892,9 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
       try {
         this.resolvePtr(target.__ptr);
-        ptr = this.s_ptr;
-        const currentCap = this.s_cap;
-        const currentCount = this.s_len;
+        ptr = this.scratchPtr;
+        const currentCap = this.scratchCap;
+        const currentCount = this.scratchLen;
 
         if (currentCount >= currentCap) {
           const newCap = Math.max(currentCap * 2, 4);
@@ -903,34 +903,34 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
           const newPtr = this.alloc(newByteSize);
 
           this.resolvePtr(target.__ptr);
-          const oldDataStart = this.s_start;
+          const oldDataStart = this.scratchStart;
 
           const idx = newPtr >> 2;
-          this._u32[idx] = TYPE_OBJECT;
-          this._u32[idx + 1] = newCap;
-          this._u32[idx + 2] = currentCount + 1;
+          this.u32[idx] = TYPE_OBJECT;
+          this.u32[idx + 1] = newCap;
+          this.u32[idx + 2] = currentCount + 1;
 
-          this._u8.set(
-            this._u8.subarray(oldDataStart, oldDataStart + currentCount * 12),
+          this.u8.set(
+            this.u8.subarray(oldDataStart, oldDataStart + currentCount * 12),
             newPtr + 12,
           );
 
           const entryOffset = newPtr + 12 + currentCount * 12;
           const eIdx = entryOffset >> 2;
-          this._u32[eIdx] = keyHandle.__ptr;
-          this._u32[eIdx + 1] = valResult.type;
-          this._u32[eIdx + 2] = valHandle.__ptr;
+          this.u32[eIdx] = keyHandle.__ptr;
+          this.u32[eIdx + 1] = valResult.type;
+          this.u32[eIdx + 2] = valHandle.__ptr;
 
-          const pIdx = this.s_ptr >> 2;
-          this._u32[pIdx] = TYPE_MOVED;
-          this._u32[pIdx + 1] = newPtr;
+          const pIdx = this.scratchPtr >> 2;
+          this.u32[pIdx] = TYPE_MOVED;
+          this.u32[pIdx + 1] = newPtr;
         } else {
-          const entryOffset = this.s_start + currentCount * 12;
+          const entryOffset = this.scratchStart + currentCount * 12;
           const eIdx = entryOffset >> 2;
-          this._u32[eIdx] = keyHandle.__ptr;
-          this._u32[eIdx + 1] = valResult.type;
-          this._u32[eIdx + 2] = valHandle.__ptr;
-          this._u32[(ptr + 8) >> 2] = currentCount + 1;
+          this.u32[eIdx] = keyHandle.__ptr;
+          this.u32[eIdx + 1] = valResult.type;
+          this.u32[eIdx + 2] = valHandle.__ptr;
+          this.u32[(ptr + 8) >> 2] = currentCount + 1;
         }
       } finally {
         this.tempRoots.pop();
@@ -944,11 +944,11 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
   private arrayEnsureCapacity(target: Pointer, minCap: number) {
     this.resolvePtr(target.__ptr);
-    if (this.s_cap >= minCap) return;
+    if (this.scratchCap >= minCap) return;
 
-    const oldCap = this.s_cap;
-    const oldLen = this.s_len;
-    const oldDataStart = this.s_start;
+    const oldCap = this.scratchCap;
+    const oldLen = this.scratchLen;
+    const oldDataStart = this.scratchStart;
 
     const newCap = Math.max(oldCap * 2, minCap);
     const newByteSize = 12 + newCap * 8;
@@ -959,20 +959,20 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     this.resolvePtr(target.__ptr);
 
     const idx = newPtr >> 2;
-    this._u32[idx] = TYPE_ARRAY;
-    this._u32[idx + 1] = newCap;
-    this._u32[idx + 2] = oldLen;
+    this.u32[idx] = TYPE_ARRAY;
+    this.u32[idx + 1] = newCap;
+    this.u32[idx + 2] = oldLen;
 
     // Copy existing data
-    this._u8.set(
-      this._u8.subarray(oldDataStart, oldDataStart + oldLen * 8),
+    this.u8.set(
+      this.u8.subarray(oldDataStart, oldDataStart + oldLen * 8),
       newPtr + 12,
     );
 
     // Mark old as moved
-    const pIdx = this.s_ptr >> 2;
-    this._u32[pIdx] = TYPE_MOVED;
-    this._u32[pIdx + 1] = newPtr;
+    const pIdx = this.scratchPtr >> 2;
+    this.u32[pIdx] = TYPE_MOVED;
+    this.u32[pIdx + 1] = newPtr;
 
     this.resolvePtr(target.__ptr);
   }
@@ -984,7 +984,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     items: any[] = [],
   ): any[] {
     this.resolvePtr(target.__ptr);
-    const len = this.s_len;
+    const len = this.scratchLen;
     const actualStart = start < 0
       ? Math.max(len + start, 0)
       : Math.min(start, len);
@@ -996,7 +996,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     // 1. Read deleted items to return
     const deletedItems: any[] = [];
     for (let i = 0; i < actualDeleteCount; i++) {
-      const offset = this.s_start + (actualStart + i) * 8;
+      const offset = this.scratchStart + (actualStart + i) * 8;
       deletedItems.push(this.readSlot(offset));
     }
 
@@ -1014,11 +1014,11 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       const srcIdx = actualStart + actualDeleteCount;
       const destIdx = actualStart + insertCount;
 
-      const srcOffset = this.s_start + srcIdx * 8;
-      const destOffset = this.s_start + destIdx * 8;
+      const srcOffset = this.scratchStart + srcIdx * 8;
+      const destOffset = this.scratchStart + destIdx * 8;
       const byteLen = tailCount * 8;
 
-      this._u8.copyWithin(destOffset, srcOffset, srcOffset + byteLen);
+      this.u8.copyWithin(destOffset, srcOffset, srcOffset + byteLen);
     }
 
     // 4. Insert Items
@@ -1033,17 +1033,17 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       }
 
       this.resolvePtr(target.__ptr);
-      const offset = this.s_start + (actualStart + i) * 8;
+      const offset = this.scratchStart + (actualStart + i) * 8;
       const oIdx = offset >> 2;
-      this._u32[oIdx] = valResult.type;
-      this._u32[oIdx + 1] = valHandle.__ptr;
+      this.u32[oIdx] = valResult.type;
+      this.u32[oIdx + 1] = valHandle.__ptr;
 
       if (isValPtr) this.tempRoots.pop();
     }
 
     // 5. Update Length
-    this._u32[(this.s_ptr + 8) >> 2] = newLen;
-    this.s_len = newLen;
+    this.u32[(this.scratchPtr + 8) >> 2] = newLen;
+    this.scratchLen = newLen;
 
     return deletedItems;
   }
@@ -1054,8 +1054,8 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
    */
   private toArrayShallow(ptr: number): any[] {
     this.resolvePtr(ptr);
-    const len = this.s_len;
-    const start = this.s_start;
+    const len = this.scratchLen;
+    const start = this.scratchStart;
     const result = new Array(len);
     for (let i = 0; i < len; i++) {
       result[i] = this.readSlot(start + i * 8);
@@ -1076,36 +1076,36 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       this.resolvePtr(target.__ptr);
       if (target.__ptr === 0) return undefined;
 
-      if (prop === "length") return this.s_len;
+      if (prop === "length") return this.scratchLen;
 
       // 1. Map common mutators to splice (efficient, no array copy)
       if (prop === "push") {
         return (...args: any[]) => {
-          this.arraySpliceImpl(target, this.s_len, 0, args);
-          return this.s_len;
+          this.arraySpliceImpl(target, this.scratchLen, 0, args);
+          return this.scratchLen;
         };
       }
       if (prop === "pop") {
         return () => {
-          if (this.s_len === 0) return undefined;
-          return this.arraySpliceImpl(target, this.s_len - 1, 1)[0];
+          if (this.scratchLen === 0) return undefined;
+          return this.arraySpliceImpl(target, this.scratchLen - 1, 1)[0];
         };
       }
       if (prop === "shift") {
         return () => {
-          if (this.s_len === 0) return undefined;
+          if (this.scratchLen === 0) return undefined;
           return this.arraySpliceImpl(target, 0, 1)[0];
         };
       }
       if (prop === "unshift") {
         return (...args: any[]) => {
           this.arraySpliceImpl(target, 0, 0, args);
-          return this.s_len;
+          return this.scratchLen;
         };
       }
       if (prop === "splice") {
         return (start: number, deleteCount?: number, ...items: any[]) => {
-          const len = this.s_len;
+          const len = this.scratchLen;
           const actualStart = start < 0 ? len + start : start;
           const maxDel = len - (actualStart < 0 ? 0 : actualStart);
           const actualDel = deleteCount === undefined
@@ -1122,15 +1122,15 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
           const flatten = (ptr: number, currentDepth: number) => {
             this.resolvePtr(ptr);
-            const len = this.s_len;
-            const start = this.s_start;
+            const len = this.scratchLen;
+            const start = this.scratchStart;
             // Capture start offset so loop is safe even if recursing changes s_ptr
             const captureStart = start;
 
             for (let i = 0; i < len; i++) {
               const offset = captureStart + i * 8;
-              const type = this._u32[offset >> 2]!;
-              const payload = this._u32[(offset + 4) >> 2]!;
+              const type = this.u32[offset >> 2]!;
+              const payload = this.u32[(offset + 4) >> 2]!;
 
               if (type === TYPE_ARRAY && currentDepth > 0) {
                 flatten(payload, currentDepth - 1);
@@ -1150,8 +1150,8 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
           callback: (value: any, index: number, array: any[]) => any,
           thisArg?: any,
         ) => {
-          const len = this.s_len;
-          const start = this.s_start;
+          const len = this.scratchLen;
+          const start = this.scratchStart;
           const result: any[] = [];
 
           for (let i = 0; i < len; i++) {
@@ -1198,8 +1198,8 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       if (typeof prop === "string") {
         const idx = Number(prop);
         if (!isNaN(idx)) {
-          if (idx >= this.s_len) return undefined;
-          return this.readSlot(this.s_start + idx * 8);
+          if (idx >= this.scratchLen) return undefined;
+          return this.readSlot(this.scratchStart + idx * 8);
         }
       }
 
@@ -1210,12 +1210,12 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
         const newLen = Number(value);
         if (!isNaN(newLen) && newLen >= 0) {
           this.resolvePtr(target.__ptr);
-          const currentLen = this.s_len;
+          const currentLen = this.scratchLen;
           if (newLen < currentLen) {
             this.arraySpliceImpl(target, newLen, currentLen - newLen);
           } else if (newLen > currentLen) {
             this.arrayEnsureCapacity(target, newLen);
-            this._u32[(this.s_ptr + 8) >> 2] = newLen;
+            this.u32[(this.scratchPtr + 8) >> 2] = newLen;
           }
           return true;
         }
@@ -1232,7 +1232,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     ownKeys: (target) => {
       this.resolvePtr(target.__ptr);
       const keys: string[] = [];
-      for (let i = 0; i < this.s_len; i++) keys.push(String(i));
+      for (let i = 0; i < this.scratchLen; i++) keys.push(String(i));
       keys.push("length");
       return keys;
     },
@@ -1240,7 +1240,7 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       if (prop === "length") {
         this.resolvePtr(target.__ptr);
         return {
-          value: this.s_len,
+          value: this.scratchLen,
           writable: true,
           enumerable: false,
           configurable: false,
@@ -1250,8 +1250,8 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       const idx = Number(prop);
       if (!isNaN(idx)) {
         this.resolvePtr(target.__ptr);
-        if (idx >= 0 && idx < this.s_len) {
-          const val = this.readSlot(this.s_start + idx * 8);
+        if (idx >= 0 && idx < this.scratchLen) {
+          const val = this.readSlot(this.scratchStart + idx * 8);
           return {
             value: val,
             enumerable: true,
@@ -1267,10 +1267,10 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
   private arraySet(target: Pointer, index: number, value: any) {
     this.resolvePtr(target.__ptr);
-    if (index < this.s_len) {
-      const offset = this.s_start + index * 8;
-      this._u32[offset >> 2] = TYPE_NULL;
-      this._u32[(offset + 4) >> 2] = 0;
+    if (index < this.scratchLen) {
+      const offset = this.scratchStart + index * 8;
+      this.u32[offset >> 2] = TYPE_NULL;
+      this.u32[(offset + 4) >> 2] = 0;
     }
 
     const valResult = this.writeValue(value);
@@ -1283,9 +1283,9 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
 
     try {
       this.resolvePtr(target.__ptr);
-      const ptr = this.s_ptr;
-      const cap = this.s_cap;
-      const len = this.s_len;
+      const ptr = this.scratchPtr;
+      const cap = this.scratchCap;
+      const len = this.scratchLen;
 
       if (index >= cap) {
         const newCap = Math.max(cap * 2, index + 1);
@@ -1294,38 +1294,38 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
         const newPtr = this.alloc(newByteSize);
 
         this.resolvePtr(target.__ptr);
-        const oldDataStart = this.s_start;
+        const oldDataStart = this.scratchStart;
 
         const idx = newPtr >> 2;
-        this._u32[idx] = TYPE_ARRAY;
-        this._u32[idx + 1] = newCap;
+        this.u32[idx] = TYPE_ARRAY;
+        this.u32[idx + 1] = newCap;
         const newLen = Math.max(len, index + 1);
-        this._u32[idx + 2] = newLen;
+        this.u32[idx + 2] = newLen;
 
         const oldByteLen = len * 8;
-        this._u8.set(
-          this._u8.subarray(oldDataStart, oldDataStart + oldByteLen),
+        this.u8.set(
+          this.u8.subarray(oldDataStart, oldDataStart + oldByteLen),
           newPtr + 12,
         );
 
-        const pIdx = this.s_ptr >> 2;
-        this._u32[pIdx] = TYPE_MOVED;
-        this._u32[pIdx + 1] = newPtr;
+        const pIdx = this.scratchPtr >> 2;
+        this.u32[pIdx] = TYPE_MOVED;
+        this.u32[pIdx + 1] = newPtr;
 
         const offset = newPtr + 12 + index * 8;
         const oIdx = offset >> 2;
-        this._u32[oIdx] = valResult.type;
-        this._u32[oIdx + 1] = valHandle.__ptr;
+        this.u32[oIdx] = valResult.type;
+        this.u32[oIdx + 1] = valHandle.__ptr;
         return;
       }
 
       const offset = ptr + 12 + index * 8;
       const oIdx = offset >> 2;
-      this._u32[oIdx] = valResult.type;
-      this._u32[oIdx + 1] = valHandle.__ptr;
+      this.u32[oIdx] = valResult.type;
+      this.u32[oIdx + 1] = valHandle.__ptr;
 
       if (index >= len) {
-        this._u32[(ptr + 8) >> 2] = index + 1;
+        this.u32[(ptr + 8) >> 2] = index + 1;
       }
     } finally {
       if (isValPtr) this.tempRoots.pop();
@@ -1359,10 +1359,10 @@ class ArrayCursor implements IterableIterator<any> {
 
   constructor(private buffer: SharedJsonBufferImpl<any>, ptr: number) {
     buffer.resolvePtr(ptr);
-    this.len = buffer.s_len;
-    this.start = buffer.s_start;
+    this.len = buffer.scratchLen;
+    this.start = buffer.scratchStart;
 
-    const type = buffer._u32[buffer.s_ptr >> 2]!;
+    const type = buffer.u32[buffer.scratchPtr >> 2]!;
     if (type !== TYPE_ARRAY) {
       throw new Error("Iterator must be used on an Array");
     }
@@ -1383,8 +1383,8 @@ class ArrayCursor implements IterableIterator<any> {
     }
 
     const offset = this.start + this.index * 8;
-    const itemType = this.buffer._u32[offset >> 2]!;
-    const itemPayload = this.buffer._u32[(offset + 4) >> 2]!;
+    const itemType = this.buffer.u32[offset >> 2]!;
+    const itemPayload = this.buffer.u32[(offset + 4) >> 2]!;
 
     this.index++;
 

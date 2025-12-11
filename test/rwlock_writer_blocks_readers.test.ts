@@ -2,8 +2,9 @@ import { assertEquals, assertGreater } from "@std/assert";
 import { move, RwLock, spawn } from "../src/deno/lib.ts";
 
 Deno.test("RwLock: Writer blocks readers", async () => {
-  const buffer = new SharedArrayBuffer(1);
-  const state = new Uint8Array(buffer);
+  const state = new Uint8Array(
+    new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT),
+  );
   const lock = new RwLock(state);
 
   // 1. Spawn a Writer that holds the lock for 500ms

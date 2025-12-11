@@ -6,8 +6,9 @@ Deno.test("RwLock: Readers do not block Readers", async () => {
   // While we can't easily assert "exact simultaneity" in a unit test without timing flake,
   // we can ensure that multiple readers complete successfully and see the correct data.
 
-  const buffer = new SharedArrayBuffer(1);
-  const data = new Uint8Array(buffer);
+  const data = new Uint8Array(
+    new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT),
+  );
   data[0] = 128; // specific value to check
   const lock = new RwLock(data);
 

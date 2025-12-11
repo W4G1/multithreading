@@ -3,8 +3,9 @@ import { RwLock } from "../src/deno/lib.ts";
 
 Deno.test("RwLock: Main thread async Read/Write usage", async () => {
   // 1. Setup Shared Memory
-  const buffer = new SharedArrayBuffer(1);
-  const data = new Uint8Array(buffer);
+  const data = new Uint8Array(
+    new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT),
+  );
   const lock = new RwLock(data);
 
   // 2. Main thread Write

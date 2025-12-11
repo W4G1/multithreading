@@ -4,8 +4,9 @@ import { move, spawn } from "../src/deno/lib.ts";
 Deno.test("Transport Hierarchy: Share > Transfer > Clone (Argument List)", async () => {
   // A. Shared Resource (SharedArrayBuffer)
   // Rule: Should remain accessible by BOTH threads simultaneously.
-  const sab = new SharedArrayBuffer(4);
-  const sharedView = new Int32Array(sab);
+  const sharedView = new Int32Array(
+    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT),
+  );
   sharedView[0] = 100;
 
   // B. Transferable Resource (Standard ArrayBuffer View)

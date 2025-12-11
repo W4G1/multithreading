@@ -12,7 +12,7 @@ export const INTERNAL_MUTEX_CONTROLLER = Symbol(
   "Thread.InternalMutexController",
 );
 
-const INDEX = 0;
+const IDX_LOCK_STATE = 0;
 const LOCKED = 1;
 const UNLOCKED = 0;
 
@@ -25,7 +25,7 @@ export interface MutexController {
 export class MutexGuard<T extends SharedMemoryView | void>
   implements Disposable {
   #data: T;
-  #mutex: MutexController;
+  readonly #mutex: MutexController;
   #released = false;
 
   constructor(data: T, mutex: MutexController) {
@@ -65,14 +65,14 @@ export class Mutex<T extends SharedMemoryView | void = void>
 
   #data: T;
   #lockState: Int32Array<SharedArrayBuffer>;
-  #controller: MutexController;
+  readonly #controller: MutexController;
 
-  constructor(data?: T, _existingLockBuffer?: SharedArrayBuffer) {
+  constructor(data?: T, _lockBuffer?: SharedArrayBuffer) {
     super();
     this.#data = data as T;
-    this.#lockState = _existingLockBuffer
-      ? new Int32Array(_existingLockBuffer)
-      : new Int32Array(new SharedArrayBuffer(4));
+    this.#lockState = _lockBuffer
+      ? new Int32Array(_lockBuffer)
+      : new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
     this.#controller = {
       unlock: () => this.#unlock(),
       blockingLock: () => this.#performBlockingLock(),
@@ -82,19 +82,29 @@ export class Mutex<T extends SharedMemoryView | void = void>
 
   #tryLock(): boolean {
     return (
-      Atomics.compareExchange(this.#lockState, INDEX, UNLOCKED, LOCKED) ===
+      Atomics.compareExchange(
+        this.#lockState,
+        IDX_LOCK_STATE,
+        UNLOCKED,
+        LOCKED,
+      ) ===
         UNLOCKED
     );
   }
 
   #unlock(): void {
     if (
-      Atomics.compareExchange(this.#lockState, INDEX, LOCKED, UNLOCKED) !==
+      Atomics.compareExchange(
+        this.#lockState,
+        IDX_LOCK_STATE,
+        LOCKED,
+        UNLOCKED,
+      ) !==
         LOCKED
     ) {
       throw new Error("Mutex was not locked or locked by another thread");
     }
-    Atomics.notify(this.#lockState, INDEX, 1);
+    Atomics.notify(this.#lockState, IDX_LOCK_STATE, 1);
   }
 
   /**
@@ -104,7 +114,7 @@ export class Mutex<T extends SharedMemoryView | void = void>
   #performBlockingLock(): void {
     while (true) {
       if (this.#tryLock()) return;
-      Atomics.wait(this.#lockState, INDEX, LOCKED);
+      Atomics.wait(this.#lockState, IDX_LOCK_STATE, LOCKED);
     }
   }
 
@@ -115,7 +125,7 @@ export class Mutex<T extends SharedMemoryView | void = void>
   async #performAsyncLock(): Promise<void> {
     while (true) {
       if (this.#tryLock()) return;
-      const result = Atomics.waitAsync(this.#lockState, INDEX, LOCKED);
+      const result = Atomics.waitAsync(this.#lockState, IDX_LOCK_STATE, LOCKED);
       if (result.async) {
         await result.value;
       }

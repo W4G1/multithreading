@@ -60,7 +60,7 @@ self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
       });
     } finally {
       for (const arg of activeArgs) {
-        if (arg && typeof arg === "object" && Symbol.dispose in arg) {
+        if (typeof arg === "object" && arg !== null && Symbol.dispose in arg) {
           try {
             arg[Symbol.dispose]();
           } catch (e) {

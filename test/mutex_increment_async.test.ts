@@ -3,8 +3,9 @@ import { move, Mutex, spawn } from "../src/deno/lib.ts";
 
 Deno.test("Mutex increment async", async () => {
   // 1. Setup Shared Memory
-  const sab = new SharedArrayBuffer(4);
-  const sharedInt = new Int32Array(sab);
+  const sharedInt = new Int32Array(
+    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT),
+  );
   const mutex = new Mutex(sharedInt);
 
   // 2. Spawn Worker

@@ -10,13 +10,16 @@ import type { Result } from "../types.ts";
 import { INTERNAL_SEMAPHORE_CONTROLLER, Semaphore } from "./semaphore.ts";
 import { SharedJsonBuffer } from "../json_buffer.ts";
 
-const HEAD_IDX = 0;
-const TAIL_IDX = 1;
-const CLOSED_IDX = 2;
-const CAP_IDX = 3;
-const TX_COUNT_IDX = 4;
-const RX_COUNT_IDX = 5;
+const IDX_HEAD = 0;
+const IDX_TAIL = 1;
+const IDX_CLOSED = 2;
+const IDX_CAP = 3;
+const IDX_TX_COUNT = 4;
+const IDX_RX_COUNT = 5;
 const META_SIZE = 6;
+
+const OPEN = 0;
+const CLOSED = 1;
 
 const ERR_DISPOSED_SENDER = new Error("Sender is disposed");
 const ERR_DISPOSED_RECEIVER = new Error("Receiver disposed");
@@ -41,29 +44,29 @@ class ChannelInternals<T> extends Serializable {
   }
 
   write(value: T): void {
-    const tail = this.state[TAIL_IDX]!;
+    const tail = this.state[IDX_TAIL]!;
     this.items[tail] = value;
-    this.state[TAIL_IDX] = (tail + 1) % this.state[CAP_IDX]!;
+    this.state[IDX_TAIL] = (tail + 1) % this.state[IDX_CAP]!;
   }
 
   read(): T | null {
-    const head = this.state[HEAD_IDX]!;
+    const head = this.state[IDX_HEAD]!;
     const val = this.items[head] as T;
 
     // Optimistic read check
     if (val === null) return null;
 
     this.items[head] = null;
-    this.state[HEAD_IDX] = (head + 1) % this.state[CAP_IDX]!;
+    this.state[IDX_HEAD] = (head + 1) % this.state[IDX_CAP]!;
     return val;
   }
 
   isClosed(): boolean {
-    return Atomics.load(this.state, CLOSED_IDX) === 1;
+    return Atomics.load(this.state, IDX_CLOSED) === CLOSED;
   }
 
   hasReceivers(): boolean {
-    return Atomics.load(this.state, RX_COUNT_IDX) > 0;
+    return Atomics.load(this.state, IDX_RX_COUNT) > 0;
   }
 
   [toSerialized]() {
@@ -140,7 +143,7 @@ export class Sender<T> extends ChannelHandle<T> {
 
   clone(): Sender<T> {
     if (this.disposed) throw new Error("Cannot clone disposed Sender");
-    Atomics.add(this.internals.state, TX_COUNT_IDX, 1);
+    Atomics.add(this.internals.state, IDX_TX_COUNT, 1);
     return new Sender(this.internals);
   }
 
@@ -224,7 +227,7 @@ export class Sender<T> extends ChannelHandle<T> {
 
     try {
       if (this.internals.isClosed()) return;
-      Atomics.store(state, CLOSED_IDX, 1);
+      Atomics.store(state, IDX_CLOSED, CLOSED);
       // Wake up everyone
       slotsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1_073_741_823);
       itemsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1_073_741_823);
@@ -236,7 +239,7 @@ export class Sender<T> extends ChannelHandle<T> {
 
   [Symbol.dispose]() {
     if (this.disposed) return;
-    const prevCount = Atomics.sub(this.internals.state, TX_COUNT_IDX, 1);
+    const prevCount = Atomics.sub(this.internals.state, IDX_TX_COUNT, 1);
     if (prevCount === 1) this.close();
     this.disposed = true;
   }
@@ -259,7 +262,7 @@ export class Receiver<T> extends ChannelHandle<T> {
 
   clone(): Receiver<T> {
     if (this.disposed) throw new Error("Cannot clone disposed Receiver");
-    Atomics.add(this.internals.state, RX_COUNT_IDX, 1);
+    Atomics.add(this.internals.state, IDX_RX_COUNT, 1);
     return new Receiver(this.internals);
   }
 
@@ -348,7 +351,7 @@ export class Receiver<T> extends ChannelHandle<T> {
   [Symbol.dispose]() {
     if (this.disposed) return;
     this.disposed = true;
-    const prevCount = Atomics.sub(this.internals.state, RX_COUNT_IDX, 1);
+    const prevCount = Atomics.sub(this.internals.state, IDX_RX_COUNT, 1);
     if (prevCount === 1) this.close();
   }
 
@@ -360,15 +363,16 @@ export class Receiver<T> extends ChannelHandle<T> {
 }
 
 export function channel<T>(capacity: number = 32): [Sender<T>, Receiver<T>] {
-  const stateSab = new SharedArrayBuffer(META_SIZE * 4);
-  const state = new Int32Array(stateSab);
+  const state = new Int32Array(
+    new SharedArrayBuffer(META_SIZE * Int32Array.BYTES_PER_ELEMENT),
+  );
 
-  state[CAP_IDX] = capacity;
-  state[HEAD_IDX] = 0;
-  state[TAIL_IDX] = 0;
-  state[CLOSED_IDX] = 0;
-  state[TX_COUNT_IDX] = 1;
-  state[RX_COUNT_IDX] = 1;
+  state[IDX_CAP] = capacity;
+  state[IDX_HEAD] = 0;
+  state[IDX_TAIL] = 0;
+  state[IDX_CLOSED] = OPEN;
+  state[IDX_TX_COUNT] = 1;
+  state[IDX_RX_COUNT] = 1;
 
   const initialData = new Array<T | null>(capacity).fill(null);
   const items = new SharedJsonBuffer(initialData);
