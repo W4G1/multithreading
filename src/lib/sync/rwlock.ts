@@ -12,35 +12,28 @@ export const INTERNAL_RWLOCK_CONTROLLER = Symbol(
   "Thread.InternalRwLockController",
 );
 
-// Defines the capabilities hidden from the user but available to the Guard
 export interface RwLockController {
   unlock(): void;
 }
 
+const INDEX = 0;
 const UNLOCKED = 0;
 const WRITE_LOCKED = -1;
 const READ_ONE = 1;
 
-/**
- * Guard for Read access.
- * Allows multiple simultaneous readers.
- */
 export class RwLockReadGuard<T extends SharedMemoryView | void>
   implements Disposable {
   #data: T;
+  #controller: RwLockController;
   #released = false;
-  [INTERNAL_RWLOCK_CONTROLLER]!: RwLockController;
 
   constructor(data: T, controller: RwLockController) {
     this.#data = data;
-    this.#released = false;
+    this.#controller = controller;
+  }
 
-    Object.defineProperty(this, INTERNAL_RWLOCK_CONTROLLER, {
-      value: controller,
-      writable: false,
-      enumerable: false,
-      configurable: false,
-    });
+  get [INTERNAL_RWLOCK_CONTROLLER](): RwLockController {
+    return this.#controller;
   }
 
   get value(): T {
@@ -50,37 +43,29 @@ export class RwLockReadGuard<T extends SharedMemoryView | void>
 
   [Symbol.dispose]() {
     if (!this.#released) {
-      const controller = this[INTERNAL_RWLOCK_CONTROLLER];
-      controller.unlock();
       this.#released = true;
+      this.#controller.unlock();
     }
   }
 
   dispose() {
-    return this[Symbol.dispose]();
+    this[Symbol.dispose]();
   }
 }
 
-/**
- * Guard for Write access.
- * Ensures exclusive access.
- */
 export class RwLockWriteGuard<T extends SharedMemoryView | void>
   implements Disposable {
   #data: T;
+  #controller: RwLockController;
   #released = false;
-  [INTERNAL_RWLOCK_CONTROLLER]!: RwLockController;
 
   constructor(data: T, controller: RwLockController) {
     this.#data = data;
-    this.#released = false;
+    this.#controller = controller;
+  }
 
-    Object.defineProperty(this, INTERNAL_RWLOCK_CONTROLLER, {
-      value: controller,
-      writable: false,
-      enumerable: false,
-      configurable: false,
-    });
+  get [INTERNAL_RWLOCK_CONTROLLER](): RwLockController {
+    return this.#controller;
   }
 
   get value(): T {
@@ -90,14 +75,13 @@ export class RwLockWriteGuard<T extends SharedMemoryView | void>
 
   [Symbol.dispose]() {
     if (!this.#released) {
-      const controller = this[INTERNAL_RWLOCK_CONTROLLER];
-      controller.unlock();
       this.#released = true;
+      this.#controller.unlock();
     }
   }
 
   dispose() {
-    return this[Symbol.dispose]();
+    this[Symbol.dispose]();
   }
 }
 
@@ -107,90 +91,82 @@ export class RwLock<T extends SharedMemoryView | void = void>
     register(2, this);
   }
 
-  #lockState: Int32Array<SharedArrayBuffer>;
   #data: T;
+  #lockState: Int32Array<SharedArrayBuffer>;
+  #readController: RwLockController;
+  #writeController: RwLockController;
 
   constructor(data?: T, _existingStateBuffer?: SharedArrayBuffer) {
     super();
     this.#data = data as T;
-    if (_existingStateBuffer) {
-      this.#lockState = new Int32Array(_existingStateBuffer);
-    } else {
-      this.#lockState = new Int32Array(new SharedArrayBuffer(4));
-    }
+
+    this.#lockState = _existingStateBuffer
+      ? new Int32Array(_existingStateBuffer)
+      : new Int32Array(new SharedArrayBuffer(4));
+
+    this.#readController = { unlock: () => this.#unlockRead() };
+    this.#writeController = { unlock: () => this.#unlockWrite() };
   }
 
-  /**
-   * Unlock logic for readers.
-   * Decrements count. If 0, notifies writers.
-   */
   #unlockRead(): void {
-    const prevState = Atomics.sub(this.#lockState, 0, READ_ONE);
-    // If we were the last reader (prevState was 1, now 0), notify potential writers
+    const prevState = Atomics.sub(this.#lockState, INDEX, READ_ONE);
+    // If we were the last reader (prevState was 1, now 0), notify writers
     if (prevState === READ_ONE) {
-      Atomics.notify(this.#lockState, 0, 1);
+      Atomics.notify(this.#lockState, INDEX, 1);
     }
   }
 
-  /**
-   * Unlock logic for writers.
-   * Sets state to 0. Notifies all (readers or writers).
-   */
   #unlockWrite(): void {
     if (
-      Atomics.compareExchange(this.#lockState, 0, WRITE_LOCKED, UNLOCKED) !==
+      Atomics.compareExchange(
+        this.#lockState,
+        INDEX,
+        WRITE_LOCKED,
+        UNLOCKED,
+      ) !==
         WRITE_LOCKED
     ) {
       throw new Error(
         "RwLock was not write-locked or locked by another thread",
       );
     }
-    // Notify all waiting readers or one waiting writer
-    Atomics.notify(this.#lockState, 0, Infinity);
+    // Notify all waiting readers or one waiting writer.
+    // We use Infinity because we might have N readers waiting.
+    Atomics.notify(this.#lockState, INDEX, Infinity);
   }
 
-  #createReadController(): RwLockController {
-    return {
-      unlock: () => this.#unlockRead(),
-    };
-  }
-
-  #createWriteController(): RwLockController {
-    return {
-      unlock: () => this.#unlockWrite(),
-    };
-  }
+  // --- Public API ---
 
   public blockingRead(): RwLockReadGuard<T> {
     while (true) {
-      const current = Atomics.load(this.#lockState, 0);
+      const current = Atomics.load(this.#lockState, INDEX);
 
       // If write locked (current == -1), wait.
       if (current === WRITE_LOCKED) {
-        Atomics.wait(this.#lockState, 0, WRITE_LOCKED);
+        Atomics.wait(this.#lockState, INDEX, WRITE_LOCKED);
         continue;
       }
 
-      // Try to increment reader count
+      // Optimistic increment
       if (
         Atomics.compareExchange(
           this.#lockState,
-          0,
+          INDEX,
           current,
           current + READ_ONE,
         ) === current
       ) {
-        return new RwLockReadGuard(this.#data, this.#createReadController());
+        return new RwLockReadGuard(this.#data, this.#readController);
       }
     }
   }
 
   public async read(): Promise<RwLockReadGuard<T>> {
     while (true) {
-      const current = Atomics.load(this.#lockState, 0);
+      const current = Atomics.load(this.#lockState, INDEX);
 
       if (current === WRITE_LOCKED) {
-        const res = Atomics.waitAsync(this.#lockState, 0, WRITE_LOCKED);
+        const res = Atomics.waitAsync(this.#lockState, INDEX, WRITE_LOCKED);
         if (res.async) {
           await res.value;
         }
@@ -200,39 +176,44 @@ export class RwLock<T extends SharedMemoryView | void = void>
       if (
         Atomics.compareExchange(
           this.#lockState,
-          0,
+          INDEX,
           current,
           current + READ_ONE,
         ) === current
       ) {
-        return new RwLockReadGuard(this.#data, this.#createReadController());
+        return new RwLockReadGuard(this.#data, this.#readController);
       }
     }
   }
 
   public blockingWrite(): RwLockWriteGuard<T> {
     while (true) {
-      const current = Atomics.load(this.#lockState, 0);
+      const current = Atomics.load(this.#lockState, INDEX);
       // Can only write if strictly UNLOCKED (0).
       if (current !== UNLOCKED) {
-        Atomics.wait(this.#lockState, 0, current);
+        Atomics.wait(this.#lockState, INDEX, current);
         continue;
       }
 
       if (
-        Atomics.compareExchange(this.#lockState, 0, UNLOCKED, WRITE_LOCKED) ===
+        Atomics.compareExchange(
+          this.#lockState,
+          INDEX,
+          UNLOCKED,
+          WRITE_LOCKED,
+        ) ===
           UNLOCKED
       ) {
-        return new RwLockWriteGuard(this.#data, this.#createWriteController());
+        return new RwLockWriteGuard(this.#data, this.#writeController);
       }
     }
   }
 
   public async write(): Promise<RwLockWriteGuard<T>> {
     while (true) {
-      const current = Atomics.load(this.#lockState, 0);
+      const current = Atomics.load(this.#lockState, INDEX);
       if (current !== UNLOCKED) {
-        const res = Atomics.waitAsync(this.#lockState, 0, current);
+        const res = Atomics.waitAsync(this.#lockState, INDEX, current);
         if (res.async) {
           await res.value;
         }
@@ -240,10 +221,15 @@ export class RwLock<T extends SharedMemoryView | void = void>
       }
 
       if (
-        Atomics.compareExchange(this.#lockState, 0, UNLOCKED, WRITE_LOCKED) ===
+        Atomics.compareExchange(
+          this.#lockState,
+          INDEX,
+          UNLOCKED,
+          WRITE_LOCKED,
+        ) ===
           UNLOCKED
       ) {
-        return new RwLockWriteGuard(this.#data, this.#createWriteController());
+        return new RwLockWriteGuard(this.#data, this.#writeController);
       }
     }
   }
@@ -270,10 +256,7 @@ export class RwLock<T extends SharedMemoryView | void = void>
   static override [toDeserialized](
     obj: ReturnType<RwLock<any>[typeof toSerialized]>["value"],
   ) {
-    let data;
-    if (obj.data !== undefined) {
-      data = deserialize(obj.data);
-    }
+    const data = obj.data !== undefined ? deserialize(obj.data) : undefined;
     return new RwLock(data, obj.stateBuffer);
   }
 }
