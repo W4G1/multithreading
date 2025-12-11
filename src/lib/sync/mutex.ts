@@ -12,31 +12,32 @@ export const INTERNAL_MUTEX_CONTROLLER = Symbol(
   "Thread.InternalMutexController",
 );
 
-// Defines the capabilities hidden from the user but available to the Guard and Condvar
+const INDEX = 0;
+const LOCKED = 1;
+const UNLOCKED = 0;
+
 export interface MutexController {
   unlock(): void;
   blockingLock(): void;
   lock(): Promise<void>;
 }
-const LOCKED = 1;
-const UNLOCKED = 0;
 
 export class MutexGuard<T extends SharedMemoryView | void>
   implements Disposable {
   #data: T;
+  #mutex: MutexController;
   #released = false;
-  [INTERNAL_MUTEX_CONTROLLER]!: MutexController;
 
-  constructor(data: T, controller: MutexController) {
+  constructor(data: T, mutex: MutexController) {
     this.#data = data;
-    this.#released = false;
+    this.#mutex = mutex;
+  }
 
-    Object.defineProperty(this, INTERNAL_MUTEX_CONTROLLER, {
-      value: controller,
-      writable: false,
-      enumerable: false,
-      configurable: false,
-    });
+  /**
+   * Internal accessor for Condvar support
+   */
+  get [INTERNAL_MUTEX_CONTROLLER](): MutexController {
+    return this.#mutex;
   }
 
   get value(): T {
@@ -46,14 +47,13 @@ export class MutexGuard<T extends SharedMemoryView | void>
 
   [Symbol.dispose]() {
     if (!this.#released) {
-      const controller = this[INTERNAL_MUTEX_CONTROLLER];
-      controller.unlock();
       this.#released = true;
+      this.#mutex.unlock();
     }
   }
 
   dispose() {
-    return this[Symbol.dispose]();
+    this[Symbol.dispose]();
   }
 }
 
@@ -63,72 +63,73 @@ export class Mutex<T extends SharedMemoryView | void = void>
     register(0, this);
   }
 
-  // Strict private fields
-  #lockState: Int32Array<SharedArrayBuffer>;
   #data: T;
+  #lockState: Int32Array<SharedArrayBuffer>;
+  #controller: MutexController;
 
   constructor(data?: T, _existingLockBuffer?: SharedArrayBuffer) {
     super();
     this.#data = data as T;
-
-    if (_existingLockBuffer) {
-      this.#lockState = new Int32Array(_existingLockBuffer);
-    } else {
-      this.#lockState = new Int32Array(new SharedArrayBuffer(4));
-    }
+    this.#lockState = _existingLockBuffer
+      ? new Int32Array(_existingLockBuffer)
+      : new Int32Array(new SharedArrayBuffer(4));
+    this.#controller = {
+      unlock: () => this.#unlock(),
+      blockingLock: () => this.#performBlockingLock(),
+      lock: () => this.#performAsyncLock(),
+    };
   }
 
   #tryLock(): boolean {
     return (
-      Atomics.compareExchange(this.#lockState, 0, UNLOCKED, LOCKED) === UNLOCKED
+      Atomics.compareExchange(this.#lockState, INDEX, UNLOCKED, LOCKED) ===
+        UNLOCKED
     );
   }
 
-  #blockingLock(): void {
+  #unlock(): void {
+    if (
+      Atomics.compareExchange(this.#lockState, INDEX, LOCKED, UNLOCKED) !==
+        LOCKED
+    ) {
+      throw new Error("Mutex was not locked or locked by another thread");
+    }
+    Atomics.notify(this.#lockState, INDEX, 1);
+  }
+
+  /**
+   * Shared logic for blocking lock.
+   * Used by both public blockingLock() and the Controller (for Condvar)
+   */
+  #performBlockingLock(): void {
     while (true) {
       if (this.#tryLock()) return;
-      Atomics.wait(this.#lockState, 0, LOCKED);
+      Atomics.wait(this.#lockState, INDEX, LOCKED);
     }
   }
 
-  async #lock(): Promise<void> {
+  /**
+   * Shared logic for async lock.
+   * Used by both public lock() and the Controller (for Condvar)
+   */
+  async #performAsyncLock(): Promise<void> {
     while (true) {
       if (this.#tryLock()) return;
-      const result = Atomics.waitAsync(this.#lockState, 0, LOCKED);
+      const result = Atomics.waitAsync(this.#lockState, INDEX, LOCKED);
       if (result.async) {
         await result.value;
       }
     }
   }
 
-  #unlock(): void {
-    if (
-      Atomics.compareExchange(this.#lockState, 0, LOCKED, UNLOCKED) !== LOCKED
-    ) {
-      throw new Error("Mutex was not locked or locked by another thread");
-    }
-    Atomics.notify(this.#lockState, 0, 1);
-  }
-
-  /**
-   * Creates the closure that allows the Guard to control this Mutex.
-   */
-  #createController(): MutexController {
-    return {
-      unlock: () => this.#unlock(),
-      blockingLock: () => this.#blockingLock(),
-      lock: () => this.#lock(),
-    };
-  }
-
   public blockingLock(): MutexGuard<T> {
-    this.#blockingLock();
-    return new MutexGuard(this.#data, this.#createController());
+    this.#performBlockingLock();
+    return new MutexGuard(this.#data, this.#controller);
   }
 
   public async lock(): Promise<MutexGuard<T>> {
-    await this.#lock();
-    return new MutexGuard(this.#data, this.#createController());
+    await this.#performAsyncLock();
+    return new MutexGuard(this.#data, this.#controller);
   }
 
   [toSerialized]() {
@@ -153,12 +154,7 @@ export class Mutex<T extends SharedMemoryView | void = void>
   static override [toDeserialized](
     obj: ReturnType<Mutex<any>[typeof toSerialized]>["value"],
   ) {
-    let data;
-
-    if (obj.data !== undefined) {
-      data = deserialize(obj.data);
-    }
-
+    const data = obj.data !== undefined ? deserialize(obj.data) : undefined;
     return new Mutex(data, obj.lockBuffer);
   }
 }
