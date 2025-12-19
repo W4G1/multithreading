@@ -8,6 +8,7 @@ import {
 
 globalThis.self = globalThis;
 
+// Polyfill ErrorEvent globally as it is used in both contexts
 globalThis.ErrorEvent = class ErrorEvent extends Event {
   public message: string;
   public filename: string;
@@ -25,6 +26,9 @@ globalThis.ErrorEvent = class ErrorEvent extends Event {
   }
 };
 
+/**
+ * Main Thread Implementation
+ */
 if (isMainThread) {
   // Directly overwrite global Worker
   globalThis.Worker = class Worker extends EventTarget {
@@ -78,7 +82,20 @@ if (isMainThread) {
   };
 }
 
+/**
+ * Worker Thread Implementation
+ */
 if (!isMainThread && parentPort) {
+  // We use Symbol.hasInstance so that "self instanceof WorkerGlobalScope" returns true
+  // even though we can't easily change the prototype of the global Node object.
+  class WorkerGlobalScope extends EventTarget {
+    static [Symbol.hasInstance](instance) {
+      return instance === globalThis;
+    }
+  }
+
+  globalThis.WorkerGlobalScope = WorkerGlobalScope;
+
   // Polyfill postMessage
   globalThis.postMessage = (message: any, transfer?: Transferable[]) => {
     parentPort.postMessage(message, transfer);
@@ -88,9 +105,10 @@ if (!isMainThread && parentPort) {
   let currentHandler = globalThis.onmessage;
 
   parentPort.on("message", (data) => {
-    if (currentHandler) {
-      const event = new MessageEvent("message", { data });
-      currentHandler(event);
+    const event = new MessageEvent("message", { data });
+
+    if (typeof globalThis.onmessage === "function") {
+      globalThis.onmessage(event);
     }
   });
 

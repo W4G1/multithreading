@@ -123,3 +123,9 @@ export function shutdown() {
     globalPool.terminate();
   }
 }
+
+const isWorker = typeof globalThis.WorkerGlobalScope !== "undefined" &&
+  self instanceof globalThis.WorkerGlobalScope;
+
+export const isMainThread = !isWorker;
+export const isWorkerThread = isWorker;
