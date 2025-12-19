@@ -26,7 +26,9 @@ export function getCallerLocation(): CallerLocation {
   let callerLine: string | undefined;
 
   // Iterate to find the first 'outsider'
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+
     if (line.trim() === "Error") continue;
 
     // Check if this line belongs to the library

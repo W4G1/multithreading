@@ -309,7 +309,8 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
     const oldRoot = Atomics.load(this.u32, OFFSET_ROOT >> 2);
     const newRoot = relocate(oldRoot, TYPE_OBJECT);
 
-    for (const root of this.tempRoots) {
+    for (let i = 0; i < this.tempRoots.length; i++) {
+      const root = this.tempRoots[i]!;
       relocate(root.handle.__ptr, root.type);
     }
 
