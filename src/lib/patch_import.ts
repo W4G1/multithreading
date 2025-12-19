@@ -96,7 +96,8 @@ export function patchDynamicImports(
   // Apply replacements
   replacements.sort((a, b) => b.start - a.start);
   let modifiedCode = code;
-  for (const rep of replacements) {
+  for (let i = 0; i < replacements.length; i++) {
+    const rep = replacements[i]!;
     const before = modifiedCode.slice(0, rep.start);
     const after = modifiedCode.slice(rep.end);
     modifiedCode = before + rep.text + after;

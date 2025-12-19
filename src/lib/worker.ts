@@ -1,11 +1,11 @@
 import { deserialize, serialize } from "./shared.ts";
-import type { WorkerTaskPayload } from "./types.ts";
+import type { UserFunction, WorkerTaskPayload } from "./types.ts";
 
-// Import for side-effects: This triggers the static { register(this) } blocks
 import "./sync/mod.ts";
 import "./json_buffer.ts";
 
-const functionRegistry = new Map<string, (...args: any[]) => any>();
+// Registry persists for the lifetime of the Worker
+const functionRegistry = new Map<string, UserFunction>();
 
 self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
   const { type, taskId, fnId, code, args: rawArgs } = event.data;
@@ -19,21 +19,28 @@ self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
     try {
       // As soon as 'deserialize' returns, we have a live Reference Count that must be disposed.
       for (const raw of rawArgs) {
-        const arg = deserialize(raw);
-        activeArgs.push(arg);
+        activeArgs.push(deserialize(raw));
       }
 
       let fn = functionRegistry.get(fnId);
+
       if (!fn) {
+        // Cache miss: 'code' must be provided by the main thread logic
+        if (!code) {
+          throw new Error(
+            `Function ID ${fnId} not found in worker registry and no code provided.`,
+          );
+        }
+
         const base64Code = btoa(code);
         const dataUrl = `data:text/javascript;base64,${base64Code}`;
         const mod = await import(dataUrl);
+
         fn = mod.default;
         functionRegistry.set(fnId, fn!);
       }
 
       let result = fn!(...activeArgs);
-
       if (result instanceof Promise) result = await result;
 
       const { value: serializedResult, transfer: transferList } = serialize(
@@ -46,9 +53,12 @@ self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
       );
     } catch (err) {
       console.error(err);
-      console.log("[START WORKER CODE DUMP]");
-      console.log(code);
-      console.log("[END WORKER CODE DUMP]");
+      // Only log code if it was sent, otherwise we know it's a registry issue
+      if (code) {
+        console.log("[START WORKER CODE DUMP]");
+        console.log(code);
+        console.log("[END WORKER CODE DUMP]");
+      }
 
       const error = err instanceof Error ? err : new Error(String(err));
 
@@ -64,7 +74,7 @@ self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
           try {
             arg[Symbol.dispose]();
           } catch (e) {
-            console.error("Failed to automatically dispose:", e);
+            console.error("Failed to dispose resource:", e);
           }
         }
       }

@@ -1,118 +1,97 @@
 import { deserialize, serialize } from "./shared.ts";
 import type { ThreadTask, WorkerResponsePayload } from "./types.ts";
 
-/**
- * In Vite, the worker detection will only work if the new URL() constructor is used directly inside the new Worker() declaration.
- * Additionally, all options parameters must be static values (i.e. string literals).
- */
 let newWorker: () => Worker;
 
 export function workerOverride(fn: () => Worker) {
   newWorker = fn;
 }
 
-export class WorkerPool {
-  private workers: Worker[] = [];
-  private workerLoad = new Map<Worker, number>();
-  private pending = new Map<
-    Worker,
-    Map<number, { resolve: (val: any) => void; reject: (err: any) => void }>
-  >();
+interface TrackedWorker extends Worker {
+  // Set of function IDs this worker has already compiled
+  _loadedFnIds: Set<string>;
+  _pending: Map<
+    number,
+    { resolve: (val: any) => void; reject: (err: any) => void }
+  >;
+}
 
-  private codeCache = new Map<string, Promise<string>>();
+export class WorkerPool {
+  private workers: TrackedWorker[] = [];
   private maxThreads: number;
   private taskIdCounter = 0;
 
   constructor(maxThreads?: number) {
-    this.maxThreads = maxThreads ?? navigator.hardwareConcurrency ?? 4;
+    this.maxThreads = maxThreads || navigator.hardwareConcurrency || 4;
   }
 
-  private spawnWorker(): Worker {
-    const worker = newWorker();
-    this.pending.set(worker, new Map());
-    this.workerLoad.set(worker, 0);
+  private createWorker(): TrackedWorker {
+    const worker = newWorker() as TrackedWorker;
 
-    // 1. Success / Task Error Handler
+    worker._loadedFnIds = new Set();
+    worker._pending = new Map();
+
     worker.onmessage = (e: MessageEvent<WorkerResponsePayload>) => {
       const { taskId, type } = e.data;
-      const workerPending = this.pending.get(worker);
-      const p = workerPending?.get(taskId);
+      const p = worker._pending.get(taskId);
 
       if (p) {
-        this.workerLoad.set(
-          worker,
-          Math.max(0, this.workerLoad.get(worker) ?? 0 - 1),
-        );
-
         if (type === "ERROR") {
           const err = new Error(e.data.error);
           if (e.data.stack) err.stack = e.data.stack;
           p.reject(err);
         } else {
-          // Rehydrate the result (Restore Mutex/Channel methods)
-          const result = deserialize(e.data.result);
-          p.resolve(result);
+          p.resolve(deserialize(e.data.result));
         }
-        workerPending?.delete(taskId);
+        worker._pending.delete(taskId);
       }
     };
 
-    // 2. Crash Handler
     worker.onerror = (e) => {
       e.preventDefault();
-      const workerPending = this.pending.get(worker);
-      if (workerPending) {
-        for (const [_, p] of workerPending) {
-          p.reject(new Error(`Worker Crashed: ${e.message}`));
-        }
-        workerPending.clear();
-      }
-      this.workerLoad.delete(worker);
-      this.pending.delete(worker);
-      this.workers = this.workers.filter((w) => w !== worker);
+      const err = new Error(`Worker Crashed: ${e.message}`);
+      for (const p of worker._pending.values()) p.reject(err);
+      worker._pending.clear();
+      this.removeWorker(worker);
     };
 
     this.workers.push(worker);
     return worker;
   }
 
-  async submit(task: ThreadTask): Promise<any> {
-    const { fnId, code, args } = task;
+  private removeWorker(worker: TrackedWorker) {
+    this.workers = this.workers.filter((w) => w !== worker);
+    worker.terminate();
+  }
 
-    // Select Worker (Least Loaded)
-    let selectedWorker: Worker;
-    if (this.workers.length < this.maxThreads) {
-      selectedWorker = this.spawnWorker();
-    } else {
-      selectedWorker = this.workers.reduce((prev, curr) => {
-        const prevLoad = this.workerLoad.get(prev)!;
-        const currLoad = this.workerLoad.get(curr)!;
-        return prevLoad < currLoad ? prev : curr;
-      });
-    }
+  private async executeTask(
+    worker: TrackedWorker,
+    task: ThreadTask,
+  ): Promise<any> {
+    const { fnId, code, args } = task;
+    const taskId = this.taskIdCounter++;
 
     const { promise, resolve, reject } = Promise.withResolvers();
 
-    const taskId = this.taskIdCounter++;
-    this.pending.get(selectedWorker)!.set(taskId, { resolve, reject });
-    this.workerLoad.set(
-      selectedWorker,
-      (this.workerLoad.get(selectedWorker) || 0) + 1,
-    );
+    worker._pending.set(taskId, { resolve, reject });
 
-    // Serialize Args & Unify Transferables
     const serializedArgs = args.map(serialize);
     const values = serializedArgs.map((r) => r.value);
     const transferList = [
       ...new Set(serializedArgs.flatMap((r) => r.transfer)),
     ];
 
-    selectedWorker.postMessage(
+    const hasCode = worker._loadedFnIds.has(fnId);
+    if (!hasCode) {
+      worker._loadedFnIds.add(fnId);
+    }
+
+    worker.postMessage(
       {
         type: "RUN",
         taskId,
         fnId,
-        code,
+        code: hasCode ? undefined : code,
         args: values,
       },
       { transfer: transferList },
@@ -121,11 +100,49 @@ export class WorkerPool {
     return await promise;
   }
 
+  async submit(task: ThreadTask): Promise<any> {
+    let bestCandidate: TrackedWorker | undefined;
+    let bestCandidateLoad = Infinity;
+    // Score: 0 = Idle+Affinity, 1 = Idle, 2 = Busy+Affinity, 3 = Busy
+    let bestCandidateScore = 4;
+
+    for (let i = 0; i < this.workers.length; i++) {
+      const w = this.workers[i]!;
+      const load = w._pending.size;
+      const hasAffinity = w._loadedFnIds.has(task.fnId);
+
+      if (load === 0 && hasAffinity) {
+        return await this.executeTask(w, task);
+      }
+
+      let score = 4;
+      if (load === 0) score = 1;
+      else if (hasAffinity) score = 2;
+      else score = 3;
+
+      if (
+        score < bestCandidateScore ||
+        (score === bestCandidateScore && load < bestCandidateLoad)
+      ) {
+        bestCandidate = w;
+        bestCandidateScore = score;
+        bestCandidateLoad = load;
+      }
+    }
+
+    if (bestCandidateScore >= 2 && this.workers.length < this.maxThreads) {
+      return await this.executeTask(this.createWorker(), task);
+    }
+
+    if (bestCandidate) {
+      return await this.executeTask(bestCandidate, task);
+    }
+
+    return await this.executeTask(this.createWorker(), task);
+  }
+
   terminate() {
     for (const w of this.workers) w.terminate();
     this.workers = [];
-    this.workerLoad.clear();
-    this.pending.clear();
-    this.codeCache.clear();
   }
 }

@@ -5,12 +5,6 @@ export type Result<T, E = Error> =
   | { ok: true; value: T }
   | { ok: false; error: E };
 
-export interface ThreadTask {
-  fnId: string;
-  code: string;
-  args: unknown[];
-}
-
 export interface JoinHandle<T> {
   join(): Promise<Result<T, Error>>;
   abort(): void;
@@ -32,6 +26,15 @@ export type SharedMemoryView =
   | SharedJsonBuffer<any>;
 
 /**
+ * The internal task structure passed from lib -> pool
+ */
+export interface ThreadTask {
+  fnId: string;
+  code: string; // The code is always available here, but Pool decides if it sends it
+  args: unknown[];
+}
+
+/**
  * The wire format.
  * 't': type
  * 'v': value
@@ -45,7 +48,7 @@ export type WorkerTaskPayload = {
   type: "RUN";
   taskId: number;
   fnId: string;
-  code: string;
+  code?: string; // Optional: Only sent if worker doesn't have it
   args: Envelope[];
 };
 

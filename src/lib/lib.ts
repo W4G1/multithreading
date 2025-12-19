@@ -8,8 +8,12 @@ export * from "./sync/mod.ts";
 export { SharedJsonBuffer } from "./json_buffer.ts";
 
 let globalPool: WorkerPool | null = null;
-const functionIdCache = new WeakMap<UserFunction, string>();
 let globalConfig = { maxWorkers: navigator.hardwareConcurrency || 4 };
+
+const globalFunctionRegistry = new WeakMap<
+  UserFunction,
+  { id: string; code: string }
+>();
 
 export function initRuntime(config: { maxWorkers: number }) {
   if (globalPool) throw new Error("Runtime already initialized");
@@ -56,7 +60,6 @@ export function spawn<R>(
   fn: (this: void) => R | Promise<R>,
 ): JoinHandle<R>;
 
-// Implementation
 export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
   const pool = getPool();
   const { resolve, reject, promise } = Promise.withResolvers<
@@ -66,7 +69,7 @@ export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
   let args: any[] = [];
   let fn: UserFunction;
 
-  // Runtime Logic: Keeps checking for the Symbol
+  // Argument parsing
   if (arg1 && Object.prototype.hasOwnProperty.call(arg1, moveTag)) {
     args = arg1;
     fn = arg2;
@@ -74,41 +77,50 @@ export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
     fn = arg1;
   }
 
-  let fnId = functionIdCache.get(fn);
-  if (!fnId) {
-    fnId = Math.random().toString().slice(2);
-    functionIdCache.set(fn, fnId);
-  }
+  let meta = globalFunctionRegistry.get(fn);
 
-  const callerLocation = getCallerLocation();
+  if (!meta) {
+    // Cache miss: Generate ID and patch code
+    const id = Math.random().toString(36).slice(2);
+    const callerLocation = getCallerLocation();
 
-  (async () => {
+    // We wrap this in a try-catch block inside the cache logic
+    // to fail early if toString fails
     try {
-      const finalCode = patchDynamicImports(
+      const code = patchDynamicImports(
         "export default " + fn.toString(),
         callerLocation.filePath,
       );
+      meta = { id, code };
+      globalFunctionRegistry.set(fn, meta);
+    } catch (err) {
+      console.error(err);
+      return {
+        join: () =>
+          Promise.resolve({
+            ok: false,
+            error: err instanceof Error
+              ? err
+              : new Error("Failed to compile function"),
+          }),
+        abort: () => {},
+      };
+    }
+  }
 
+  // Task submission
+  (async () => {
+    try {
       const task: ThreadTask = {
-        fnId,
-        code: finalCode,
+        fnId: meta!.id,
+        code: meta!.code,
         args,
       };
 
-      try {
-        const val = await pool.submit(task);
-        resolve({ ok: true, value: val });
-      } catch (err) {
-        resolve({ ok: false, error: err as Error });
-      }
+      const val = await pool.submit(task);
+      resolve({ ok: true, value: val });
     } catch (err) {
-      console.error(err);
-      resolve({
-        ok: false,
-        error: err instanceof Error
-          ? err
-          : new Error("Failed to extract function source"),
-      });
+      resolve({ ok: false, error: err as Error });
     }
   })();
 
@@ -121,6 +133,7 @@ export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
 export function shutdown() {
   if (globalPool) {
     globalPool.terminate();
+    globalPool = null;
   }
 }
 
