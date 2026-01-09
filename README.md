@@ -98,7 +98,7 @@ await handle.join();
 
 `SharedJsonBuffer` enables Mutex-protected shared memory for JSON objects, eliminating the overhead of `postMessage` data copying. It supports partial updates by utilizing [Proxies](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy) under the hood, reserializing only changed bytes rather than the entire object tree for high-performance state synchronization, especially with large JSON objects.
 
-**Note:** Initializing a `SharedJsonBuffer` has a performance cost. For single-use transfers, `SharedJsonBuffer` is slower than cloning. This data structure is optimized for small updates to a large persistent shared object, and will be accessed frequently by multiple threads.
+**Note:** Initializing a `SharedJsonBuffer` has a performance cost. For single-use transfers, `SharedJsonBuffer` is slower than cloning. This data structure is optimized for incremental updates to a large persistent shared object or array that will be accessed frequently between multiple threads.
 
 ```typescript
 import { spawn, move, Mutex, SharedJsonBuffer } from "multithreading";
@@ -335,8 +335,7 @@ Unlike an event emitter where all listeners hear every event, a Channel ensures 
 ```typescript
 import { spawn, move, channel } from "multithreading";
 
-// Create a channel that holds objects
-const [tx, rx] = channel<{ hello: string }>();
+const [tx, rx] = channel();
 
 // Producer
 spawn(move(tx), async (sender) => {
@@ -349,8 +348,8 @@ spawn(move(tx), async (sender) => {
 // Consumer
 await spawn(move(rx.clone()), async (receiver) => {
   // Manually take the first item from the queue
-  const value = await receiver.recv();
-  console.log("Worker got:", value); // { hello: "world" }
+  const result = await receiver.recv();
+  console.log("Worker got:", result.value); // { hello: "world" }
 }).join();
 
 // Because we cloned rx, the main thread also still has a rx handle
