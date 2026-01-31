@@ -511,11 +511,18 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
         return { type: TYPE_STRING, payload: ptr };
       }
 
-      // Write directly to shared memory
-      const { written } = this.textEncoder.encodeInto(
-        value,
-        this.u8.subarray(currentPtr + 4, currentPtr + maxBytes),
-      );
+      // This faster because it writes directly to shared memory but does not work in the browser because of security reasons:
+      // TextEncoder.encodeInto: Argument 2 can't be a SharedArrayBuffer or an ArrayBufferView backed by a SharedArrayBuffer
+
+      // const { written } = this.textEncoder.encodeInto(
+      //   value,
+      //   this.u8.subarray(currentPtr + 4, currentPtr + maxBytes),
+      // );
+
+      // So alternatively we use the (slower) approach below to stay compatible with browsers
+      const encoded = this.textEncoder.encode(value);
+      const written = Math.min(encoded.length, maxBytes);
+      this.u8.set(encoded.subarray(0, written), currentPtr + 4);
 
       // Write actual length
       this.u32[currentPtr >> 2] = written!;
