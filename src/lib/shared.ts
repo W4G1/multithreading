@@ -1,3 +1,4 @@
+import { Transferable } from "./transferable.ts";
 import { Envelope } from "./types.ts";
 
 export const toSerialized = Symbol("Thread.Serialize");
@@ -35,14 +36,6 @@ export function register(typeId: number, cls: SerializableConstructor) {
   reverseClassRegistry.set(cls, typeId);
 }
 
-const TRANSFERABLE_CLASSES = [
-  MessagePort,
-  ReadableStream,
-  WritableStream,
-  TransformStream,
-  ArrayBuffer,
-];
-
 export function serialize(arg: any): {
   value: Envelope;
   transfer: Transferable[];
@@ -78,8 +71,8 @@ export function serialize(arg: any): {
     if (!(arg.buffer instanceof SharedArrayBuffer)) {
       transfer.push(arg.buffer);
     }
-  } else if (TRANSFERABLE_CLASSES.some((t) => arg instanceof t)) {
-    transfer.push(arg as Transferable);
+  } else if (arg instanceof Transferable) {
+    transfer.push(arg);
   }
 
   return {
