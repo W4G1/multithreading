@@ -47,8 +47,7 @@ import { spawn } from "multithreading";
 // Spawn a task on a background thread
 const handle = spawn(() => {
   // This code runs in a separate worker
-  const result = Math.random();
-  return result;
+  return Math.random();
 });
 
 // Wait for the result
