@@ -52,13 +52,7 @@ const handle = spawn(() => {
 });
 
 // Wait for the result
-const result = await handle.join();
-
-if (result.ok) {
-  console.log("Result:", result.value); // 0.6378467071314606
-} else {
-  console.error("Worker error:", result.error);
-}
+const result = await handle.join(); // { ok: true, value: 0.6378467071314606 }
 ```
 
 -----
