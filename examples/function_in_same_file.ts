@@ -6,7 +6,7 @@ export function sum(a: number, b: number) {
 }
 
 const handle = spawn(move(5, 10), async (n1, n2) => {
-  const { sum } = await import("./function_from_same_file.ts");
+  const { sum } = await import("./function_in_same_file.ts");
   return sum(n1, n2);
 });
 
