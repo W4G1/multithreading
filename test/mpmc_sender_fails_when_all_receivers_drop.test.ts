@@ -1,5 +1,5 @@
 import { assertFalse } from "@std/assert/false";
-import { channel, move, spawn } from "../src/deno/lib.ts";
+import { channel, move, spawn } from "multithreading";
 import { assert } from "@std/assert";
 
 Deno.test("MPMC - Sender Fails when all Receivers Drop", async () => {

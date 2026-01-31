@@ -1,5 +1,5 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
-import { move, spawn } from "../src/deno/lib.ts";
+import { move, spawn } from "multithreading";
 
 Deno.test("Nested Uint8Array should be CLONED (Fallback Safety)", async () => {
   // 1. Setup Data

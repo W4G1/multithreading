@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { channel, move, spawn } from "../src/deno/lib.ts";
+import { channel, move, spawn } from "multithreading";
 import { assert } from "@std/assert/assert";
 
 Deno.test("MPMC - Multiple Consumers (Load Balancing)", async () => {

@@ -67,10 +67,10 @@ Deno.bench(
   "comlink (Sequential)",
   { group: "invokation_throughput" },
   async () => {
-    const Comlink = await import("npm:comlink");
+    const Comlink = await import("comlink");
 
     const workerCode = `
-      import * as Comlink from "npm:comlink";
+      import * as Comlink from "comlink";
       Comlink.expose({ 
         run() { return "Done"; }
       });
@@ -91,10 +91,10 @@ Deno.bench(
   "comlink (Parallel)",
   { group: "invokation_throughput" },
   async () => {
-    const Comlink = await import("npm:comlink");
+    const Comlink = await import("comlink");
 
     const workerCode = `
-      import * as Comlink from "npm:comlink";
+      import * as Comlink from "comlink";
       Comlink.expose({ 
         run() { return "Done"; }
       });
@@ -115,7 +115,7 @@ Deno.bench(
   "multithreading (Sequential)",
   { group: "invokation_throughput" },
   async () => {
-    const { spawn, shutdown } = await import("../src/deno/lib.ts");
+    const { spawn, shutdown } = await import("multithreading");
 
     for (let i = 0; i < INVOKATIONS; i++) {
       await spawn(() => {
@@ -131,7 +131,7 @@ Deno.bench(
   "multithreading (Parallel)",
   { group: "invokation_throughput" },
   async () => {
-    const { spawn, shutdown } = await import("../src/deno/lib.ts");
+    const { spawn, shutdown } = await import("multithreading");
 
     await Promise.all(
       new Array(INVOKATIONS).fill(null).map(() =>

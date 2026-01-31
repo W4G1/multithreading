@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { SharedJsonBuffer } from "../src/deno/lib.ts";
+import { SharedJsonBuffer } from "multithreading";
 
 Deno.test("Flyweight Iterator Bug", () => {
   const buffer = new SharedJsonBuffer([{ a: 1 }, { a: 2 }]);

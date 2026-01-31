@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { move, Mutex, spawn } from "../src/deno/lib.ts";
+import { move, Mutex, spawn } from "multithreading";
 
 Deno.test("Mutex with Transferable Data (Standard Int32Array)", async () => {
   // 1. Setup Standard Memory (Not Shared)

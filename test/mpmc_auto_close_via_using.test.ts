@@ -1,5 +1,5 @@
 import { assertEquals, assertFalse } from "@std/assert";
-import { channel, move, spawn } from "../src/deno/lib.ts";
+import { channel, move, spawn } from "multithreading";
 
 Deno.test("MPMC - Auto Close via 'using' (Sender Drop)", async () => {
   const [tx, rx] = channel<number>(10);

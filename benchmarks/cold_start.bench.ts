@@ -25,10 +25,10 @@ Deno.bench(
   "comlink",
   { group: "cold_start" },
   async () => {
-    const Comlink = await import("npm:comlink");
+    const Comlink = await import("comlink");
 
     const workerCode = `
-      import * as Comlink from "npm:comlink";
+      import * as Comlink from "comlink";
       Comlink.expose({ 
         run() {
           return "Done";
@@ -48,7 +48,7 @@ Deno.bench(
   "multithreading",
   { group: "cold_start" },
   async () => {
-    const { spawn, shutdown } = await import("../src/deno/lib.ts");
+    const { spawn, shutdown } = await import("multithreading");
 
     await spawn(() => {
       return "Done";

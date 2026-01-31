@@ -26,10 +26,10 @@ Deno.bench(
   "comlink (Structured Cloning)",
   { group: "parallel_json_patching" },
   async () => {
-    const Comlink = await import("npm:comlink");
+    const Comlink = await import("comlink");
 
     const workerCode = `
-      import * as Comlink from "npm:comlink";
+      import * as Comlink from "comlink";
 
       Comlink.expose({
         run(data: any) {
@@ -67,7 +67,7 @@ Deno.bench(
   { group: "parallel_json_patching" },
   async () => {
     const { move, Mutex, SharedJsonBuffer, spawn, shutdown } = await import(
-      "../src/deno/lib.ts"
+      "multithreading"
     );
 
     const mutex = new Mutex(

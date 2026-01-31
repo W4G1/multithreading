@@ -185,6 +185,7 @@
       "jsr:@std/assert@^1.0.16",
       "jsr:@std/fs@^1.0.20",
       "jsr:@std/path@^1.1.3",
+      "npm:comlink@*",
       "npm:typescript@^5.9.3"
     ]
   }

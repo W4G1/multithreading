@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
-import { move, RwLock, spawn } from "../src/deno/lib.ts";
-import { initRuntime } from "../src/lib/lib.ts";
+import { move, RwLock, spawn } from "multithreading";
+import { initRuntime } from "multithreading";
 
 const THREAD_COUNT = 4;
 const INCREMENTS_PER_THREAD = 50;

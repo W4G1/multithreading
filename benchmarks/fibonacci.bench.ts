@@ -1,4 +1,4 @@
-import { spawn } from "../src/deno/lib.ts";
+import { spawn } from "multithreading";
 
 const BATCH_SIZE = 500;
 

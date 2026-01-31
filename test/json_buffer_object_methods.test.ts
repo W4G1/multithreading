@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertExists } from "@std/assert";
-import { SharedJsonBuffer } from "../src/deno/lib.ts";
+import { SharedJsonBuffer } from "multithreading";
 
 Deno.test("Object CRUD: Property Access and Assignment", () => {
   const db = new SharedJsonBuffer<{ name: string; age: number; city?: string }>(

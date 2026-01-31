@@ -1,4 +1,4 @@
-import { move, RwLock, spawn } from "../src/deno/lib.ts";
+import { move, RwLock, spawn } from "multithreading";
 
 const WORKERS = navigator.hardwareConcurrency;
 const SIZE = 10_000_000;

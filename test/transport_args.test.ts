@@ -1,5 +1,5 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
-import { move, spawn } from "../src/deno/lib.ts";
+import { move, spawn } from "multithreading";
 
 Deno.test("Transport Hierarchy: Share > Transfer > Clone (Argument List)", async () => {
   // A. Shared Resource (SharedArrayBuffer)

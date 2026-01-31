@@ -1,6 +1,6 @@
 import { assert, assertEquals } from "@std/assert";
-import { Barrier, move, spawn } from "../src/deno/lib.ts";
-import { initRuntime } from "../src/lib/lib.ts";
+import { Barrier, move, spawn } from "multithreading";
+import { initRuntime } from "multithreading";
 
 initRuntime({ maxWorkers: 8 });
 

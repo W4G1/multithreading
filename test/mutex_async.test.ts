@@ -1,4 +1,4 @@
-import { move, Mutex, spawn } from "../src/deno/lib.ts";
+import { move, Mutex, spawn } from "multithreading";
 
 Deno.test("Mutex async", async () => {
   const sharedInt = new Int32Array(

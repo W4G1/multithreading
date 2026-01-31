@@ -1,5 +1,5 @@
 import { assertEquals, assertGreater } from "@std/assert";
-import { move, RwLock, spawn } from "../src/deno/lib.ts";
+import { move, RwLock, spawn } from "multithreading";
 
 Deno.test("RwLock: Writer blocks readers", async () => {
   const state = new Uint8Array(

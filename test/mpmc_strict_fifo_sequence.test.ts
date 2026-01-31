@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "@std/assert";
-import { channel, move, spawn } from "../src/deno/lib.ts";
+import { channel, move, spawn } from "multithreading";
 
 Deno.test("MPMC - Strict FIFO Sequence (Single Producer -> Single Consumer)", async () => {
   const [tx, rx] = channel<number>(100);

@@ -1,11 +1,11 @@
 import { assertEquals } from "@std/assert";
-import { move, Semaphore, spawn } from "../src/deno/lib.ts";
+import { move, Semaphore, spawn } from "multithreading";
 
 Deno.test("Semaphore Manual Release (Bypassing 'using')", async () => {
   const sem = new Semaphore(1);
 
   const handle = spawn(move(sem), async (s) => {
-    const { drop } = await import("../src/deno/lib.ts");
+    const { drop } = await import("multithreading");
     // Test A: Manual Dispose on the Guard
     const guard = await s.acquire();
     // ... work ...

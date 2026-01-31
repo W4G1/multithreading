@@ -1,5 +1,5 @@
-import { move, Mutex, spawn } from "../src/deno/lib.ts";
-import { initRuntime } from "../src/lib/lib.ts";
+import { move, Mutex, spawn } from "multithreading";
+import { initRuntime } from "multithreading";
 
 initRuntime({ maxWorkers: 2 });
 

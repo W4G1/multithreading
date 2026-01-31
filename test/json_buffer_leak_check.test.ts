@@ -1,5 +1,5 @@
 import { assert } from "@std/assert";
-import { SharedJsonBuffer } from "../src/deno/lib.ts";
+import { SharedJsonBuffer } from "multithreading";
 
 declare const gc: () => void;
 

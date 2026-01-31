@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { SharedJsonBuffer } from "../src/deno/lib.ts";
+import { SharedJsonBuffer } from "multithreading";
 
 Deno.test("UTF-8 Corruption: Short strings with multi-byte chars", () => {
   const input = {

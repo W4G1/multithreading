@@ -1,6 +1,6 @@
 import { assertLess } from "@std/assert";
-import { move, Semaphore, spawn } from "../src/deno/lib.ts";
-import { initRuntime } from "../src/lib/lib.ts";
+import { move, Semaphore, spawn } from "multithreading";
+import { initRuntime } from "multithreading";
 
 initRuntime({ maxWorkers: 3 });
 

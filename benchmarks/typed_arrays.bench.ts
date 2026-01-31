@@ -9,10 +9,10 @@ Deno.bench(
   "comlink",
   { group: "typed_arrays" },
   async () => {
-    const Comlink = await import("npm:comlink");
+    const Comlink = await import("comlink");
 
     const workerCode = `
-      import * as Comlink from "npm:comlink";
+      import * as Comlink from "comlink";
       Comlink.expose({ 
         process(d: Float32Array) {
           return d[0]! + d[d.length - 1]!;
@@ -32,7 +32,7 @@ Deno.bench(
   { group: "typed_arrays" },
   async () => {
     const { move, spawn, shutdown } = await import(
-      "../src/deno/lib.ts"
+      "multithreading"
     );
 
     await spawn(move(DATA), (d) => {

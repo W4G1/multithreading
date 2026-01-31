@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { RwLock } from "../src/deno/lib.ts";
+import { RwLock } from "multithreading";
 
 Deno.test("RwLock: Main thread async Read/Write usage", async () => {
   // 1. Setup Shared Memory
