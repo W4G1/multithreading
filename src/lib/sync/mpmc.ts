@@ -77,35 +77,34 @@ class ChannelInternals<T> extends Serializable {
     const itemsAvailSer = serialize(this.itemsAvailable);
     const slotsAvailSer = serialize(this.slotsAvailable);
 
-    return {
-      value: {
-        state: this.state.buffer,
-        items: itemsSer.value,
-        sendLock: sendLockSer.value,
-        recvLock: recvLockSer.value,
-        itemsAvailable: itemsAvailSer.value,
-        slotsAvailable: slotsAvailSer.value,
-      },
-      transfer: [
-        ...itemsSer.transfer,
-        ...sendLockSer.transfer,
-        ...recvLockSer.transfer,
-        ...itemsAvailSer.transfer,
-        ...slotsAvailSer.transfer,
+    return [
+      [
+        this.state.buffer,
+        itemsSer[0],
+        sendLockSer[0],
+        recvLockSer[0],
+        itemsAvailSer[0],
+        slotsAvailSer[0],
       ],
-    };
+      itemsSer[1].concat(
+        sendLockSer[1],
+        recvLockSer[1],
+        itemsAvailSer[1],
+        slotsAvailSer[1],
+      ),
+    ] as const;
   }
 
   static override [toDeserialized](
-    data: ReturnType<ChannelInternals<any>[typeof toSerialized]>["value"],
+    data: ReturnType<ChannelInternals<any>[typeof toSerialized]>[0],
   ) {
     return new ChannelInternals(
-      new Int32Array(data.state),
-      deserialize(data.items),
-      deserialize(data.sendLock),
-      deserialize(data.recvLock),
-      deserialize(data.itemsAvailable),
-      deserialize(data.slotsAvailable),
+      new Int32Array(data[0]),
+      deserialize(data[1]),
+      deserialize(data[2]),
+      deserialize(data[3]),
+      deserialize(data[4]),
+      deserialize(data[5]),
     );
   }
 }
@@ -246,7 +245,7 @@ export class Sender<T> extends ChannelHandle<T> {
   }
 
   static override [toDeserialized](
-    obj: ReturnType<Sender<any>[typeof toSerialized]>["value"],
+    obj: ReturnType<Sender<any>[typeof toSerialized]>[0],
   ) {
     return new Sender(deserialize(obj));
   }
@@ -357,7 +356,7 @@ export class Receiver<T> extends ChannelHandle<T> {
   }
 
   static override [toDeserialized](
-    obj: ReturnType<Receiver<any>[typeof toSerialized]>["value"],
+    obj: ReturnType<Receiver<any>[typeof toSerialized]>[0],
   ) {
     return new Receiver(deserialize(obj));
   }

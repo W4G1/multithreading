@@ -11,9 +11,19 @@ export type { JoinHandle, Result, SharedMemoryView } from "./types.ts";
 let globalPool: WorkerPool | null = null;
 let globalConfig = { maxWorkers: navigator.hardwareConcurrency || 4 };
 
+let functionIdCounter = 0;
 const globalFunctionRegistry = new WeakMap<
   UserFunction,
-  { id: string; code: string }
+  [
+    /**
+     * fnId
+     */
+    number,
+    /**
+     * code
+     */
+    string,
+  ]
 >();
 
 export function initRuntime(config: { maxWorkers: number }) {
@@ -82,7 +92,8 @@ export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
 
   if (!meta) {
     // Cache miss: Generate ID and patch code
-    const id = Math.random().toString(36).slice(2);
+    // const id = Math.random().toString(36).slice(2);
+    const id = functionIdCounter++;
     const callerLocation = getCallerLocation();
 
     // We wrap this in a try-catch block inside the cache logic
@@ -92,7 +103,7 @@ export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
         "export default " + fn.toString(),
         callerLocation.filePath,
       );
-      meta = { id, code };
+      meta = [id, code];
       globalFunctionRegistry.set(fn, meta);
     } catch (err) {
       console.error(err);
@@ -112,11 +123,11 @@ export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
   // Task submission
   (async () => {
     try {
-      const task: ThreadTask = {
-        fnId: meta!.id,
-        code: meta!.code,
+      const task: ThreadTask = [
+        meta![0],
+        meta![1],
         args,
-      };
+      ];
 
       const val = await pool.submit(task);
       resolve({ ok: true, value: val });

@@ -1,25 +1,35 @@
-import { deserialize, serialize } from "./shared.ts";
-import type { UserFunction, WorkerTaskPayload } from "./types.ts";
+import {
+  deserialize,
+  serialize,
+  WorkerResponseType,
+  WorkerTaskType,
+} from "./shared.ts";
+import type {
+  UserFunction,
+  WorkerErrorResponse,
+  WorkerResultResponse,
+  WorkerTaskPayload,
+} from "./types.ts";
 
 import "./sync/mod.ts";
 import "./json_buffer.ts";
 
 // Registry persists for the lifetime of the Worker
-const functionRegistry = new Map<string, UserFunction>();
+const functionRegistry = new Map<number, UserFunction>();
 
 self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
-  const { type, taskId, fnId, code, args: rawArgs } = event.data;
+  const [type, taskId, fnId, rawArgs, code] = event.data;
 
-  if (type === "RUN") {
+  if (type === WorkerTaskType.RUN) {
     // We need a stable array to hold successfully hydrated handles.
     // We cannot use .map() because if it throws halfway, we lose the
     // references to the handles that succeeded
-    const activeArgs: any[] = [];
+    const activeArgs: any[] = new Array(rawArgs.length);
 
     try {
       // As soon as 'deserialize' returns, we have a live Reference Count that must be disposed.
-      for (const raw of rawArgs) {
-        activeArgs.push(deserialize(raw));
+      for (let i = 0; i < rawArgs.length; i++) {
+        activeArgs[i] = deserialize(rawArgs[i]!);
       }
 
       let fn = functionRegistry.get(fnId);
@@ -43,12 +53,16 @@ self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
       let result = fn!(...activeArgs);
       if (result instanceof Promise) result = await result;
 
-      const { value: serializedResult, transfer: transferList } = serialize(
+      const [serializedResult, transferList] = serialize(
         result,
       );
 
       self.postMessage(
-        { type: "RESULT", taskId, result: serializedResult },
+        [
+          WorkerResponseType.RESULT,
+          taskId,
+          serializedResult,
+        ] as WorkerResultResponse,
         { transfer: transferList },
       );
     } catch (err) {
@@ -62,12 +76,12 @@ self.onmessage = async (event: MessageEvent<WorkerTaskPayload>) => {
 
       const error = err instanceof Error ? err : new Error(String(err));
 
-      self.postMessage({
-        type: "ERROR",
+      self.postMessage([
+        WorkerResponseType.ERROR,
         taskId,
-        error: error.message,
-        stack: error.stack,
-      });
+        error.message,
+        error.stack,
+      ] as WorkerErrorResponse);
     } finally {
       for (const arg of activeArgs) {
         if (typeof arg === "object" && arg !== null && Symbol.dispose in arg) {

@@ -1469,17 +1469,13 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
   }
 
   [toSerialized]() {
-    return {
-      value: this.buffer,
-      transfer: [],
-      typeId: 7,
-    };
+    return [this.buffer, [] as any, 7] as const;
   }
 
   static override [toDeserialized](
     data: ReturnType<
       SharedJsonBufferImpl<any>[typeof toSerialized]
-    >["value"],
+    >[0],
   ) {
     return new SharedJsonBufferImpl(null as any, data);
   }

@@ -75,14 +75,11 @@ export class Condvar extends Serializable {
   }
 
   [toSerialized]() {
-    return {
-      value: this.#atomic.buffer,
-      transfer: [],
-    };
+    return [this.#atomic.buffer] as const;
   }
 
   static override [toDeserialized](
-    obj: ReturnType<Condvar[typeof toSerialized]>["value"],
+    obj: ReturnType<Condvar[typeof toSerialized]>[0],
   ) {
     return new Condvar(obj);
   }

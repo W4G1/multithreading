@@ -244,24 +244,19 @@ export class RwLock<T extends SharedMemoryView | void = void>
     let transfer: Transferable[] = [];
 
     if (this.#data !== undefined) {
-      const result = serialize(this.#data);
-      serializedData = result.value;
-      transfer = result.transfer;
+      [serializedData, transfer] = serialize(this.#data);
     }
 
-    return {
-      value: {
-        stateBuffer: this.#lockState.buffer,
-        data: serializedData,
-      },
+    return [
+      [this.#lockState.buffer, serializedData],
       transfer,
-    };
+    ] as const;
   }
 
   static override [toDeserialized](
-    obj: ReturnType<RwLock<any>[typeof toSerialized]>["value"],
+    obj: ReturnType<RwLock<any>[typeof toSerialized]>[0],
   ) {
-    const data = obj.data !== undefined ? deserialize(obj.data) : undefined;
-    return new RwLock(data, obj.stateBuffer);
+    const data = obj[1] !== undefined ? deserialize(obj[1]) : undefined;
+    return new RwLock(data, obj[0]);
   }
 }

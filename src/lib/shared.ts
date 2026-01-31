@@ -9,6 +9,15 @@ export const enum PayloadType {
   LIB = 1, // Library data (Mutex, Sender, Receiver)
 }
 
+export const enum WorkerTaskType {
+  RUN = 0,
+}
+
+export const enum WorkerResponseType {
+  RESULT = 0,
+  ERROR = 1,
+}
+
 export interface SerializableConstructor<
   T extends Serializable = Serializable,
 > {
@@ -17,13 +26,38 @@ export interface SerializableConstructor<
 }
 
 export abstract class Serializable {
-  abstract [toSerialized](): {
-    value: unknown;
-    transfer: Transferable[];
-    // Escape hatch for proxies
-    typeId?: number;
-  };
-  static [toDeserialized](obj: unknown): Serializable {
+  abstract [toSerialized]():
+    | readonly [
+      /**
+       * value
+       */
+      unknown,
+    ]
+    | readonly [
+      /**
+       * value
+       */
+      unknown,
+      /**
+       * transfer
+       */
+      Transferable[],
+    ]
+    | readonly [
+      /**
+       * value
+       */
+      unknown,
+      /**
+       * transfer
+       */
+      Transferable[],
+      /**
+       * typeId (Escape hatch for proxies)
+       */
+      number,
+    ];
+  static [toDeserialized](_obj: unknown): Serializable {
     throw new Error(`[toDeserialized] not implemented for ${this.name}`);
   }
 }
@@ -36,13 +70,12 @@ export function register(typeId: number, cls: SerializableConstructor) {
   reverseClassRegistry.set(cls, typeId);
 }
 
-export function serialize(arg: any): {
-  value: Envelope;
-  transfer: Transferable[];
-} {
+export function serialize(
+  arg: any,
+): [Envelope, Transferable[]] {
   // Null/Undefined
   if (arg === null || arg === undefined) {
-    return { value: { t: PayloadType.RAW, v: arg }, transfer: [] };
+    return [[PayloadType.RAW, arg], []];
   }
 
   // Library Object (Instance of Serializable)
@@ -50,17 +83,16 @@ export function serialize(arg: any): {
     typeof arg === "object" && arg !== null &&
     typeof arg[toSerialized] === "function"
   ) {
-    const { value, transfer, typeId } = arg[toSerialized]();
+    const [value, transfer, typeId] = arg[toSerialized]() as ReturnType<
+      Serializable[typeof toSerialized]
+    >;
     const Ctor = arg.constructor as SerializableConstructor;
 
-    return {
-      value: {
-        t: PayloadType.LIB,
-        c: typeId ?? reverseClassRegistry.get(Ctor)!,
-        v: value,
-      },
-      transfer,
-    };
+    return [[
+      PayloadType.LIB,
+      value,
+      typeId ?? reverseClassRegistry.get(Ctor)!,
+    ], transfer ?? []];
   }
 
   // Transferables / Raw Data
@@ -75,26 +107,23 @@ export function serialize(arg: any): {
     transfer.push(arg);
   }
 
-  return {
-    value: { t: PayloadType.RAW, v: arg },
-    transfer,
-  };
+  return [[PayloadType.RAW, arg], transfer] as const;
 }
 
 export function deserialize(envelope: Envelope): any {
   if (!envelope || typeof envelope !== "object") return envelope;
 
-  if (envelope.t === PayloadType.RAW) {
-    return envelope.v;
+  if (envelope[0] === PayloadType.RAW) {
+    return envelope[1];
   }
 
-  if (envelope.t === PayloadType.LIB) {
-    const Cls = classRegistry.get(envelope.c);
+  if (envelope[0] === PayloadType.LIB) {
+    const Cls = classRegistry.get(envelope[2]);
     if (Cls) {
-      return Cls[toDeserialized](envelope.v);
+      return Cls[toDeserialized](envelope[1]);
     }
     throw new Error(
-      `Unknown TypeID ${envelope.c}. Did you forget to import the class?`,
+      `Unknown TypeID ${envelope[2]}. Did you forget to import the class?`,
     );
   }
 

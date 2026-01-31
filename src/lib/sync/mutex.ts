@@ -148,24 +148,19 @@ export class Mutex<T extends SharedMemoryView | void = void>
     let transfer: Transferable[] = [];
 
     if (this.#data !== undefined) {
-      const result = serialize(this.#data);
-      serializedData = result.value;
-      transfer = result.transfer;
+      [serializedData, transfer] = serialize(this.#data);
     }
 
-    return {
-      value: {
-        lockBuffer: this.#lockState.buffer,
-        data: serializedData,
-      },
-      transfer: transfer,
-    };
+    return [
+      [this.#lockState.buffer, serializedData],
+      transfer,
+    ] as const;
   }
 
   static override [toDeserialized](
-    obj: ReturnType<Mutex<any>[typeof toSerialized]>["value"],
+    obj: ReturnType<Mutex<any>[typeof toSerialized]>[0],
   ) {
-    const data = obj.data !== undefined ? deserialize(obj.data) : undefined;
-    return new Mutex(data, obj.lockBuffer);
+    const data = obj[1] !== undefined ? deserialize(obj[1]) : undefined;
+    return new Mutex(data, obj[0]);
   }
 }

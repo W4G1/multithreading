@@ -1,5 +1,9 @@
 import type { SharedJsonBuffer } from "./json_buffer.ts";
-import type { PayloadType } from "./shared.ts";
+import type {
+  PayloadType,
+  WorkerResponseType,
+  WorkerTaskType,
+} from "./shared.ts";
 
 export type Result<T, E = Error> =
   | { ok: true; value: T }
@@ -28,33 +32,87 @@ export type SharedMemoryView =
 /**
  * The internal task structure passed from lib -> pool
  */
-export interface ThreadTask {
-  fnId: string;
-  code: string; // The code is always available here, but Pool decides if it sends it
-  args: unknown[];
-}
+export type ThreadTask = [
+  /**
+   * fnId
+   */
+  number,
+  /**
+   * code (Is always available here, but Pool decides if it sends it)
+   */
+  string,
+  /**
+   * args
+   */
+  unknown[],
+];
 
 /**
  * The wire format.
- * 't': type
- * 'v': value
- * 'c': typeId (optional, only for LIB)
+ * [type, value, typeId (optional, only for LIB)]
  */
 export type Envelope =
-  | { t: PayloadType.RAW; v: any }
-  | { t: PayloadType.LIB; c: number; v: any };
+  | readonly [PayloadType.RAW, any]
+  | readonly [PayloadType.LIB, any, number];
 
-export type WorkerTaskPayload = {
-  type: "RUN";
-  taskId: number;
-  fnId: string;
-  code?: string; // Optional: Only sent if worker doesn't have it
-  args: Envelope[];
-};
+export type WorkerTaskPayload = [
+  /**
+   * type
+   */
+  WorkerTaskType.RUN,
+  /**
+   * taskId
+   */
+  number,
+  /**
+   * fnId
+   */
+  number,
+  /**
+   * args
+   */
+  Envelope[],
+  /**
+   * code
+   */
+  string | undefined,
+];
 
-export type WorkerResponsePayload =
-  | { type: "RESULT"; taskId: number; result: Envelope }
-  | { type: "ERROR"; taskId: number; error: string; stack?: string };
+export type WorkerResultResponse = [
+  /**
+   * type
+   */
+  WorkerResponseType.RESULT,
+  /**
+   * taskId
+   */
+  number,
+  /**
+   * result
+   */
+  Envelope,
+];
+
+export type WorkerErrorResponse = [
+  /**
+   * type
+   */
+  WorkerResponseType.ERROR,
+  /**
+   * taskId
+   */
+  number,
+  /**
+   * error
+   */
+  string,
+  /**
+   * code
+   */
+  string | undefined,
+];
+
+export type WorkerResponsePayload = WorkerResultResponse | WorkerErrorResponse;
 
 export type UserFunction = (
   ...args: unknown[]

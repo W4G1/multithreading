@@ -157,10 +157,7 @@ export class Semaphore extends Serializable {
   }
 
   [toSerialized]() {
-    return {
-      value: this.#state.buffer,
-      transfer: [],
-    };
+    return [this.#state.buffer] as const;
   }
 
   static override [toDeserialized](buffer: SharedArrayBuffer) {

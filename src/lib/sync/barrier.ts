@@ -157,14 +157,11 @@ export class Barrier extends Serializable {
   }
 
   [toSerialized]() {
-    return {
-      value: this.#state.buffer,
-      transfer: [],
-    };
+    return [this.#state.buffer] as const;
   }
 
   static override [toDeserialized](
-    buffer: ReturnType<Barrier[typeof toSerialized]>["value"],
+    buffer: ReturnType<Barrier[typeof toSerialized]>[0],
   ) {
     return new Barrier(undefined, buffer);
   }

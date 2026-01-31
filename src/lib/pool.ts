@@ -1,5 +1,14 @@
-import { deserialize, serialize } from "./shared.ts";
-import type { ThreadTask, WorkerResponsePayload } from "./types.ts";
+import {
+  deserialize,
+  serialize,
+  WorkerResponseType,
+  WorkerTaskType,
+} from "./shared.ts";
+import type {
+  ThreadTask,
+  WorkerResponsePayload,
+  WorkerTaskPayload,
+} from "./types.ts";
 
 let newWorker: () => Worker;
 
@@ -7,142 +16,202 @@ export function workerOverride(fn: () => Worker) {
   newWorker = fn;
 }
 
-interface TrackedWorker extends Worker {
-  // Set of function IDs this worker has already compiled
-  _loadedFnIds: Set<string>;
-  _pending: Map<
-    number,
-    { resolve: (val: any) => void; reject: (err: any) => void }
-  >;
-}
+// Reusable empty array to prevent GC thrashing
+const EMPTY_ARRAY: any = [];
 
 export class WorkerPool {
-  private workers: TrackedWorker[] = [];
+  // SoA: Separate arrays for cache locality
+  private workers: (Worker | undefined)[] = [];
+  private loadCounts: Int32Array;
+  private affinities: (Set<number> | undefined)[] = [];
+
+  // Ring Buffer for callbacks (Power of 2 size)
+  private pendingResolves: Array<((val: any) => void) | null>;
+  private pendingRejects: Array<((err: any) => void) | null>;
+  private taskIdMask: number;
+
   private maxThreads: number;
-  private taskIdCounter = 0;
+  private taskIdCounter: number = 0;
 
   constructor(maxThreads?: number) {
     this.maxThreads = maxThreads || navigator.hardwareConcurrency || 4;
+
+    // Fixed size buffers
+    this.workers = new Array(this.maxThreads);
+    this.affinities = new Array(this.maxThreads);
+    this.loadCounts = new Int32Array(this.maxThreads);
+
+    // Ring Buffer Setup (Size 65536)
+    const bufferSize = 1 << 16;
+    this.taskIdMask = bufferSize - 1;
+    this.pendingResolves = new Array(bufferSize).fill(null);
+    this.pendingRejects = new Array(bufferSize).fill(null);
   }
 
-  private createWorker(): TrackedWorker {
-    const worker = newWorker() as TrackedWorker;
+  // Hot-path serialization using manual loops
+  private processArgs(args: any[]): [any[], Transferable[]] {
+    const len = args.length;
+    if (len === 0) return [EMPTY_ARRAY, EMPTY_ARRAY];
 
-    worker._loadedFnIds = new Set();
-    worker._pending = new Map();
+    const values = new Array(len);
+    const transfers: Transferable[] = [];
+
+    for (let i = 0; i < len; i++) {
+      const serialized = serialize(args[i]);
+      values[i] = serialized[0];
+
+      const transList = serialized[1];
+      if (transList && transList.length > 0) {
+        const tLen = transList.length;
+        for (let j = 0; j < tLen; j++) {
+          transfers.push(transList[j]!);
+        }
+      }
+    }
+    return [values, transfers];
+  }
+
+  private createWorker(index: number): Worker {
+    const worker = newWorker();
 
     worker.onmessage = (e: MessageEvent<WorkerResponsePayload>) => {
-      const { taskId, type } = e.data;
-      const p = worker._pending.get(taskId);
+      const type = e.data[0];
+      const taskId = e.data[1];
 
-      if (p) {
-        if (type === "ERROR") {
-          const err = new Error(e.data.error);
-          if (e.data.stack) err.stack = e.data.stack;
-          p.reject(err);
+      // Direct Memory Access: Decrement load
+      this.loadCounts[index]!--;
+
+      // Ring Buffer Lookup (Bitwise AND)
+      const slot = taskId & this.taskIdMask;
+      const resolve = this.pendingResolves[slot];
+      const reject = this.pendingRejects[slot];
+
+      // Nullify slot immediately
+      this.pendingResolves[slot] = null;
+      this.pendingRejects[slot] = null;
+
+      if (resolve) {
+        if (type === WorkerResponseType.ERROR) {
+          const err = new Error(e.data[2]);
+          if (e.data[3]) err.stack = e.data[3];
+          reject!(err);
         } else {
-          p.resolve(deserialize(e.data.result));
+          resolve(deserialize(e.data[2]));
         }
-        worker._pending.delete(taskId);
       }
     };
 
     worker.onerror = (e) => {
       e.preventDefault();
-      const err = new Error(`Worker Crashed: ${e.message}`);
-      for (const p of worker._pending.values()) p.reject(err);
-      worker._pending.clear();
-      this.removeWorker(worker);
+      this.nukeWorker(index);
     };
 
-    this.workers.push(worker);
+    this.workers[index] = worker;
+    this.affinities[index] = new Set();
     return worker;
   }
 
-  private removeWorker(worker: TrackedWorker) {
-    this.workers = this.workers.filter((w) => w !== worker);
-    worker.terminate();
+  private nukeWorker(index: number) {
+    if (this.workers[index]) {
+      this.workers[index]!.terminate();
+    }
+    this.workers[index] = undefined;
+    this.loadCounts[index] = 0;
+    this.affinities[index] = undefined;
   }
 
-  private async executeTask(
-    worker: TrackedWorker,
-    task: ThreadTask,
-  ): Promise<any> {
-    const { fnId, code, args } = task;
-    const taskId = this.taskIdCounter++;
+  submit(task: ThreadTask): Promise<any> {
+    const fnId = task[0];
+
+    // Bitwise optimized scheduler
+    // Rank = (Load << 1) | (NoAffinity ? 1 : 0)
+    // Lower Rank is better.
+
+    let bestIdx = -1;
+    let bestRank = 0x7FFFFFFF; // Max Int32
+
+    // Hoist array references to local scope to avoid `this.` lookups in loop
+    const loads = this.loadCounts;
+    const affinities = this.affinities;
+    const threads = this.maxThreads;
+    const workers = this.workers;
+
+    for (let i = 0; i < threads; i++) {
+      // Check if slot is empty
+      if (!workers[i]) {
+        // Empty slot acts as "Rank -1" (Infinite Preference) because it allows scaling up.
+        // We break immediately to spawn a new worker if we haven't found a perfect idle one yet.
+        if (bestRank > 0) {
+          bestIdx = i;
+          bestRank = -1;
+          break;
+        }
+        continue;
+      }
+
+      const load = loads[i]!;
+      // Bitwise Pack:
+      // If affinity exists (has(fnId)), right bit is 0. Else 1.
+      // This adds a penalty of "0.5 load" to workers without code.
+      const rank = (load << 1) | (affinities[i]!.has(fnId) ? 0 : 1);
+
+      if (rank < bestRank) {
+        bestIdx = i;
+        bestRank = rank;
+
+        // If Rank is 0 (Idle + Affinity), it is unbeatable.
+        if (rank === 0) break;
+      }
+    }
+
+    let worker: Worker;
+    let isNew = false;
+
+    if (bestRank === -1) {
+      worker = this.createWorker(bestIdx);
+      isNew = true;
+    } else {
+      worker = workers[bestIdx]!;
+    }
 
     const { promise, resolve, reject } = Promise.withResolvers();
+    const id = this.taskIdCounter++;
+    const slot = id & this.taskIdMask;
 
-    worker._pending.set(taskId, { resolve, reject });
+    this.pendingResolves[slot] = resolve;
+    this.pendingRejects[slot] = reject;
 
-    const serializedArgs = args.map(serialize);
-    const values = serializedArgs.map((r) => r.value);
-    const transferList = [
-      ...new Set(serializedArgs.flatMap((r) => r.transfer)),
-    ];
+    loads[bestIdx]!++;
 
-    const hasCode = worker._loadedFnIds.has(fnId);
-    if (!hasCode) {
-      worker._loadedFnIds.add(fnId);
+    const [values, transferList] = this.processArgs(task[2]);
+
+    // Update Affinity (only if needed)
+    if (!isNew) {
+      const aff = affinities[bestIdx]!;
+      if (!aff.has(fnId)) aff.add(fnId);
+    } else {
+      // New workers already have the Set created in createWorker
+      affinities[bestIdx]!.add(fnId);
     }
+
+    const sendCode = isNew || (bestRank & 1) === 1;
 
     worker.postMessage(
-      {
-        type: "RUN",
-        taskId,
+      [
+        WorkerTaskType.RUN,
+        id,
         fnId,
-        code: hasCode ? undefined : code,
-        args: values,
-      },
-      { transfer: transferList },
+        values,
+        sendCode ? task[1] : undefined,
+      ] as WorkerTaskPayload,
+      transferList,
     );
 
-    return await promise;
-  }
-
-  async submit(task: ThreadTask): Promise<any> {
-    let bestCandidate: TrackedWorker | undefined;
-    let bestCandidateLoad = Infinity;
-    // Score: 0 = Idle+Affinity, 1 = Idle, 2 = Busy+Affinity, 3 = Busy
-    let bestCandidateScore = 4;
-
-    for (let i = 0; i < this.workers.length; i++) {
-      const w = this.workers[i]!;
-      const load = w._pending.size;
-      const hasAffinity = w._loadedFnIds.has(task.fnId);
-
-      if (load === 0 && hasAffinity) {
-        return await this.executeTask(w, task);
-      }
-
-      let score = 4;
-      if (load === 0) score = 1;
-      else if (hasAffinity) score = 2;
-      else score = 3;
-
-      if (
-        score < bestCandidateScore ||
-        (score === bestCandidateScore && load < bestCandidateLoad)
-      ) {
-        bestCandidate = w;
-        bestCandidateScore = score;
-        bestCandidateLoad = load;
-      }
-    }
-
-    if (bestCandidateScore >= 2 && this.workers.length < this.maxThreads) {
-      return await this.executeTask(this.createWorker(), task);
-    }
-
-    if (bestCandidate) {
-      return await this.executeTask(bestCandidate, task);
-    }
-
-    return await this.executeTask(this.createWorker(), task);
+    return promise;
   }
 
   terminate() {
-    for (const w of this.workers) w.terminate();
+    for (const w of this.workers) w?.terminate();
     this.workers = [];
   }
 }
