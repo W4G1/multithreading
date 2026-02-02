@@ -1,7 +1,8 @@
 Deno.bench(
   "native",
   { group: "cold_start" },
-  async () => {
+  async (t) => {
+    t.start();
     const workerCode = `
       self.onmessage = () => {
         self.postMessage("Done");
@@ -16,6 +17,7 @@ Deno.bench(
       };
       worker.postMessage("run");
     });
+    t.end();
 
     worker.terminate();
   },
@@ -24,7 +26,8 @@ Deno.bench(
 Deno.bench(
   "comlink",
   { group: "cold_start" },
-  async () => {
+  async (t) => {
+    t.start();
     const Comlink = await import("comlink");
 
     const workerCode = `
@@ -40,6 +43,8 @@ Deno.bench(
     const api = Comlink.wrap<{ run(): "Done" }>(worker);
 
     await api.run();
+    t.end();
+
     worker.terminate();
   },
 );
@@ -47,12 +52,14 @@ Deno.bench(
 Deno.bench(
   "multithreading",
   { group: "cold_start" },
-  async () => {
+  async (t) => {
+    t.start();
     const { spawn, shutdown } = await import("multithreading");
 
     await spawn(() => {
       return "Done";
     }).join();
+    t.end();
 
     shutdown();
   },

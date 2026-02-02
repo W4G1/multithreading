@@ -4,22 +4,22 @@ export interface CallerLocation {
   column: number; // 0-based index
 }
 
+// Default internal files to ignore
+const internalFiles = [
+  "caller_location.ts",
+  "caller_location.js",
+  "lib.ts",
+  "lib.js",
+  "internal",
+  "node_modules",
+  "native",
+];
+
 /**
  * Analyzes the stack trace to find the file and coordinates
  * where this function was called.
  */
 export function getCallerLocation(): CallerLocation {
-  // Default internal files to ignore
-  const internalFiles = [
-    "caller_location.ts",
-    "caller_location.js",
-    "lib.ts",
-    "lib.js",
-    "internal",
-    "node_modules",
-    "native",
-  ];
-
   const stack = new Error().stack!;
   const lines = stack.split("\n");
 

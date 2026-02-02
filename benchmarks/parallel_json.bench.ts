@@ -25,9 +25,10 @@ const INITIAL_DATA = {
 Deno.bench(
   "comlink (Structured Cloning)",
   { group: "parallel_json_patching" },
-  async () => {
+  async (t) => {
     const Comlink = await import("comlink");
 
+    t.start();
     const workerCode = `
       import * as Comlink from "comlink";
 
@@ -57,6 +58,7 @@ Deno.bench(
     for (let i = 0; i < TRANSACTION_COUNT; i++) {
       currentData = await comlinkApi.run(currentData);
     }
+    t.end();
 
     worker.terminate();
   },
@@ -65,11 +67,12 @@ Deno.bench(
 Deno.bench(
   "multithreading (SharedJsonBuffer + Mutex)",
   { group: "parallel_json_patching" },
-  async () => {
+  async (t) => {
     const { move, Mutex, SharedJsonBuffer, spawn, shutdown } = await import(
       "multithreading"
     );
 
+    t.start();
     const mutex = new Mutex(
       new SharedJsonBuffer(INITIAL_DATA, {
         size: BUFFER_SIZE,
@@ -86,6 +89,7 @@ Deno.bench(
         data.users[idx]!.lastLogin = Date.now();
       }).join();
     }
+    t.end();
 
     shutdown();
   },

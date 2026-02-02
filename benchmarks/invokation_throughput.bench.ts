@@ -3,7 +3,7 @@ const INVOKATIONS = 10000;
 Deno.bench(
   "native (Sequential)",
   { group: "invokation_throughput" },
-  async () => {
+  async (t) => {
     const workerCode = `
       self.onmessage = () => {
         self.postMessage("Done");
@@ -15,12 +15,14 @@ Deno.bench(
     const run = () =>
       new Promise((resolve) => {
         worker.onmessage = (e) => resolve(e.data);
-        worker.postMessage("run");
+        worker.postMessage(undefined);
       });
 
+    t.start();
     for (let i = 0; i < INVOKATIONS; i++) {
       await run();
     }
+    t.end();
 
     worker.terminate();
   },
@@ -29,7 +31,7 @@ Deno.bench(
 Deno.bench(
   "native (Parallel)",
   { group: "invokation_throughput" },
-  async () => {
+  async (t) => {
     const workerCode = `
       self.onmessage = (e) => {
         // Echo the ID back to match the promise
@@ -50,6 +52,7 @@ Deno.bench(
       }
     };
 
+    t.start();
     const tasks = new Array(INVOKATIONS);
     for (let i = 0; i < INVOKATIONS; i++) {
       tasks[i] = new Promise((resolve) => {
@@ -59,6 +62,8 @@ Deno.bench(
     }
 
     await Promise.all(tasks);
+    t.end();
+
     worker.terminate();
   },
 );
@@ -66,12 +71,12 @@ Deno.bench(
 Deno.bench(
   "comlink (Sequential)",
   { group: "invokation_throughput" },
-  async () => {
+  async (t) => {
     const Comlink = await import("comlink");
 
     const workerCode = `
       import * as Comlink from "comlink";
-      Comlink.expose({ 
+      Comlink.expose({
         run() { return "Done"; }
       });
     `;
@@ -79,9 +84,11 @@ Deno.bench(
     const worker = new Worker(URL.createObjectURL(blob), { type: "module" });
     const api = Comlink.wrap<{ run(): "Done" }>(worker);
 
+    t.start();
     for (let i = 0; i < INVOKATIONS; i++) {
       await api.run();
     }
+    t.end();
 
     worker.terminate();
   },
@@ -90,7 +97,7 @@ Deno.bench(
 Deno.bench(
   "comlink (Parallel)",
   { group: "invokation_throughput" },
-  async () => {
+  async (t) => {
     const Comlink = await import("comlink");
 
     const workerCode = `
@@ -103,9 +110,14 @@ Deno.bench(
     const worker = new Worker(URL.createObjectURL(blob), { type: "module" });
     const api = Comlink.wrap<{ run(): "Done" }>(worker);
 
-    await Promise.all(
-      new Array(INVOKATIONS).fill(null).map(() => api.run()),
-    );
+    const arr = new Array(INVOKATIONS);
+
+    t.start();
+    for (let i = 0; i < INVOKATIONS; i++) {
+      arr[i] = api.run();
+    }
+    await Promise.all(arr);
+    t.end();
 
     worker.terminate();
   },
@@ -114,14 +126,16 @@ Deno.bench(
 Deno.bench(
   "multithreading (Sequential)",
   { group: "invokation_throughput" },
-  async () => {
+  async (t) => {
     const { spawn, shutdown } = await import("multithreading");
 
+    t.start();
     for (let i = 0; i < INVOKATIONS; i++) {
       await spawn(() => {
         return "Done";
       }).join();
     }
+    t.end();
 
     shutdown();
   },
@@ -130,16 +144,19 @@ Deno.bench(
 Deno.bench(
   "multithreading (Parallel)",
   { group: "invokation_throughput" },
-  async () => {
+  async (t) => {
     const { spawn, shutdown } = await import("multithreading");
 
-    await Promise.all(
-      new Array(INVOKATIONS).fill(null).map(() =>
-        spawn(() => {
-          return "Done";
-        }).join()
-      ),
-    );
+    const arr = new Array(INVOKATIONS);
+
+    t.start();
+    for (let i = 0; i < INVOKATIONS; i++) {
+      arr[i] = spawn(() => {
+        return "Done";
+      }).join();
+    }
+    await Promise.all(arr);
+    t.end();
 
     shutdown();
   },

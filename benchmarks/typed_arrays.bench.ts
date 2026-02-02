@@ -8,9 +8,10 @@ export function process(d: Float32Array) {
 Deno.bench(
   "comlink",
   { group: "typed_arrays" },
-  async () => {
+  async (t) => {
     const Comlink = await import("comlink");
 
+    t.start();
     const workerCode = `
       import * as Comlink from "comlink";
       Comlink.expose({ 
@@ -24,20 +25,25 @@ Deno.bench(
     const api = Comlink.wrap<{ process(d: Float32Array): number }>(worker);
 
     await api.process(DATA);
+    t.end();
+
+    worker.terminate();
   },
 );
 
 Deno.bench(
   "multithreading",
   { group: "typed_arrays" },
-  async () => {
+  async (t) => {
     const { move, spawn, shutdown } = await import(
       "multithreading"
     );
 
+    t.start();
     await spawn(move(DATA), (d) => {
       return d[0]! + d[d.length - 1]!;
     }).join();
+    t.end();
 
     shutdown();
   },
