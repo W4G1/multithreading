@@ -12,8 +12,8 @@ let globalPool: WorkerPool | null = null;
 let globalConfig = { maxWorkers: navigator.hardwareConcurrency || 4 };
 
 let functionIdCounter = 0;
-const globalFunctionRegistry = new WeakMap<
-  UserFunction,
+const globalFunctionRegistry = new Map<
+  string,
   [
     /**
      * fnId
@@ -88,36 +88,20 @@ export function spawn(arg1: any, arg2?: any): JoinHandle<any> {
     fn = arg1;
   }
 
-  let meta = globalFunctionRegistry.get(fn);
+  const stringified = fn.toString();
+
+  let meta = globalFunctionRegistry.get(stringified);
 
   if (!meta) {
-    // Cache miss: Generate ID and patch code
-    // const id = Math.random().toString(36).slice(2);
     const id = functionIdCounter++;
     const callerLocation = getCallerLocation();
 
-    // We wrap this in a try-catch block inside the cache logic
-    // to fail early if toString fails
-    try {
-      const code = patchDynamicImports(
-        "export default " + fn.toString(),
-        callerLocation.filePath,
-      );
-      meta = [id, code];
-      globalFunctionRegistry.set(fn, meta);
-    } catch (err) {
-      console.error(err);
-      return {
-        join: () =>
-          Promise.resolve({
-            ok: false,
-            error: err instanceof Error
-              ? err
-              : new Error("Failed to compile function"),
-          }),
-        abort: () => {},
-      };
-    }
+    const code = patchDynamicImports(
+      "export default " + stringified,
+      callerLocation.filePath,
+    );
+    meta = [id, code];
+    globalFunctionRegistry.set(stringified, meta);
   }
 
   // Task submission
