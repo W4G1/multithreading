@@ -29,8 +29,11 @@ export function getCallerLocation(): CallerLocation {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
 
-    if (line.trim() === "Error") continue;
-
+    switch(line.trim()) {
+      case "Error": 
+      case "Error:": 
+        continue;
+    }
     // Check if this line belongs to the library
     const isInternal = internalFiles.some((file) => line.includes(file));
 
