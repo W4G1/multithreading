@@ -362,7 +362,7 @@ export class Receiver<T> extends ChannelHandle<T> {
   }
 }
 
-export function channel<T>(capacity: number = 32): [Sender<T>, Receiver<T>] {
+export function channel<T>(capacity: number = 32, options?: { size?: number }): [Sender<T>, Receiver<T>] {
   const state = new Int32Array(
     new SharedArrayBuffer(META_SIZE * Int32Array.BYTES_PER_ELEMENT),
   );
@@ -375,7 +375,7 @@ export function channel<T>(capacity: number = 32): [Sender<T>, Receiver<T>] {
   state[IDX_RX_COUNT] = 1;
 
   const initialData = new Array<T | null>(capacity).fill(null);
-  const items = new SharedJsonBuffer(initialData);
+  const items = new SharedJsonBuffer(initialData, options);
 
   const internals = new ChannelInternals(
     state,
