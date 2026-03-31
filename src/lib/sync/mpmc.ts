@@ -292,7 +292,7 @@ export class Receiver<T> extends ChannelHandle<T> {
     // Deep-copy under sendLock to prevent concurrent GC from
     // compacting the SharedArrayBuffer while we traverse the proxy.
     const sendToken = await this.internals.sendLock.acquire();
-    const copied = typeof val?.toJSON === "function" ? (val as any).toJSON() : val;
+    const copied = typeof (val as any)?.toJSON === "function" ? (val as any).toJSON() : val;
     sendToken[Symbol.dispose]();
 
     // Handover: Item token consumed -> Slot token released
