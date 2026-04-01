@@ -604,7 +604,15 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
         return Reflect.get(target, prop, receiver);
       }
       if (prop === "__ptr") return target.__ptr;
-      if (prop === "toJSON") return () => this.toJSON(target.__ptr);
+      if (prop === "toJSON")
+        return () => {
+          // Clear caches that may be stale from another thread's GC
+          // compacting the shared buffer and recycling addresses.
+          this.stringCache.clear();
+          this.proxyCache.clear();
+          this.propertyHints.clear();
+          return this.toJSON(target.__ptr);
+        };
 
       const ptr = target.__ptr;
       if (ptr === 0) return undefined;
@@ -1211,7 +1219,13 @@ class SharedJsonBufferImpl<T extends Proxyable> extends Serializable {
       if (prop === CONSOLE_VIEW) return () => this.toConsoleView(target.__ptr);
       if (prop === toSerialized) return () => this[toSerialized]();
       if (prop === "__ptr") return target.__ptr;
-      if (prop === "toJSON") return () => this.toJSON(target.__ptr);
+      if (prop === "toJSON")
+        return () => {
+          this.stringCache.clear();
+          this.proxyCache.clear();
+          this.propertyHints.clear();
+          return this.toJSON(target.__ptr);
+        };
       if (prop === Symbol.iterator) {
         return () => new ArrayCursor(this, target.__ptr);
       }

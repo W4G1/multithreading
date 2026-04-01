@@ -289,9 +289,15 @@ export class Receiver<T> extends ChannelHandle<T> {
         : { ok: false, error: ERR_SPURIOUS };
     }
 
+    // Deep-copy under sendLock to prevent concurrent GC from
+    // compacting the SharedArrayBuffer while we traverse the proxy.
+    const sendToken = await this.internals.sendLock.acquire();
+    const copied = typeof (val as any)?.toJSON === "function" ? (val as any).toJSON() : val;
+    sendToken[Symbol.dispose]();
+
     // Handover: Item token consumed -> Slot token released
     this.internals.slotsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1);
-    return { ok: true, value: val };
+    return { ok: true, value: copied };
   }
 
   blockingRecv(): Result<T, Error> {
@@ -320,8 +326,14 @@ export class Receiver<T> extends ChannelHandle<T> {
         : { ok: false, error: ERR_SPURIOUS };
     }
 
+    // Deep-copy under sendLock to prevent concurrent GC from
+    // compacting the SharedArrayBuffer while we traverse the proxy.
+    const sendToken = this.internals.sendLock.blockingAcquire();
+    const copied = typeof (val as any)?.toJSON === "function" ? (val as any).toJSON() : val;
+    sendToken[Symbol.dispose]();
+
     this.internals.slotsAvailable[INTERNAL_SEMAPHORE_CONTROLLER].release(1);
-    return { ok: true, value: val };
+    return { ok: true, value: copied };
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<T, void, void> {
